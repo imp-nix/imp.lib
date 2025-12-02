@@ -1,5 +1,6 @@
 {
   pkgs,
+  system,
   nix-unit,
   treefmt-nix,
   ...
@@ -13,7 +14,7 @@ let
 in
 {
   default = pkgs.mkShell {
-    packages = [ nix-unit.packages.${pkgs.system}.default ];
+    packages = [ nix-unit.packages.${system}.default ];
     inputsFrom = [ treefmtEval.config.build.devShell ];
   };
 }

@@ -1,6 +1,7 @@
 {
   self,
   pkgs,
+  system,
   nixpkgs,
   nix-unit,
   treefmt-nix,
@@ -18,7 +19,7 @@ in
   nix-unit =
     pkgs.runCommand "nix-unit-tests"
       {
-        nativeBuildInputs = [ nix-unit.packages.${pkgs.system}.default ];
+        nativeBuildInputs = [ nix-unit.packages.${system}.default ];
       }
       ''
         export HOME=$TMPDIR

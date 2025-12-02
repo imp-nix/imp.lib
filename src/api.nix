@@ -6,7 +6,7 @@
 
   - Filtering: filter, filterNot, match, matchNot, initFilter
   - Transforming: map, mapTree
-  - Tree building: tree, treeWith, flakeOutputs, configTree, configTreeWith
+  - Tree building: tree, treeWith, configTree, configTreeWith
   - File lists: leafs, files, pipeTo
   - Extending: addPath, addAPI, withLib, new
 */
@@ -175,32 +175,6 @@ in
   treeWith =
     lib: f: path:
     ((current.withLib lib).mapTree f).tree path;
-
-  /*
-    .flakeOutputs { systems, pkgsFor, args } <path>
-    Build flake outputs with automatic per-system detection.
-    Files accepting `pkgs` or `system` are wrapped with lib.genAttrs.
-
-      (imp.withLib lib).flakeOutputs {
-        systems = [ "x86_64-linux" "aarch64-linux" ];
-        pkgsFor = system: nixpkgs.legacyPackages.''${system};
-        args = { inherit self lib; };
-      } ./outputs
-  */
-  flakeOutputs =
-    {
-      systems,
-      pkgsFor,
-      args ? { },
-    }:
-    path:
-    if updated.lib == null then
-      throw "You need to call withLib before using flakeOutputs."
-    else
-      import ./flakeOutputs.nix {
-        inherit (updated) lib treef filterf;
-        inherit systems pkgsFor args;
-      } path;
 
   /*
     .configTree <path>

@@ -1,5 +1,6 @@
 {
   pkgs,
+  system,
   nix-unit,
   ...
 }:
@@ -8,7 +9,7 @@
     type = "app";
     program = toString (
       pkgs.writeShellScript "run-tests" ''
-        ${nix-unit.packages.${pkgs.system}.default}/bin/nix-unit --flake .#tests
+        ${nix-unit.packages.${system}.default}/bin/nix-unit --flake .#tests
       ''
     );
   };

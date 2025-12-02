@@ -3,16 +3,16 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    flake-parts.url = "github:hercules-ci/flake-parts";
     nix-unit.url = "github:nix-community/nix-unit";
     treefmt-nix.url = "github:numtide/treefmt-nix";
   };
 
   outputs =
-    {
+    inputs@{
       self,
       nixpkgs,
-      flake-utils,
+      flake-parts,
       nix-unit,
       treefmt-nix,
       ...
@@ -20,14 +20,14 @@
     let
       imp = import ./src;
       lib = nixpkgs.lib;
+      flakeModule = import ./src/flakeModule.nix;
     in
     {
       tests = import ./tests { inherit lib; };
 
       # Export imp as a callable functor with essential methods
-      # Avoid exporting self-referential attrs (leafs, filter, map, etc.)
       __functor = imp.__functor;
-      __config = imp.__config; # Required for __functor to work
+      __config = imp.__config;
       withLib = imp.withLib;
       addPath = imp.addPath;
       addAPI = imp.addAPI;
@@ -38,24 +38,31 @@
       treeWith = imp.treeWith;
       configTree = imp.configTree;
       configTreeWith = imp.configTreeWith;
-      flakeOutputs = imp.flakeOutputs;
+
+      # Flake-parts integration
+      flakeModules.default = flakeModule;
     }
-    // flake-utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
+    // flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
+
+      imports = [ flakeModule ];
+
+      # Dogfooding: use imp module to load outputs
+      imp = {
+        src = ./outputs;
         args = {
           inherit
             self
-            pkgs
             nixpkgs
             nix-unit
             treefmt-nix
             ;
         };
-        # Dogfooding: use .treeWith to load per-system outputs from ./outputs
-        outputs = imp.treeWith lib (f: f args) ./outputs;
-      in
-      outputs
-    );
+      };
+    };
 }

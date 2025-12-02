@@ -9,6 +9,7 @@ Add `imp` as a flake input:
 ```nix
 {
   inputs.imp.url = "github:Alb-O/imp";
+  inputs.flake-parts.url = "github:hercules-ci/flake-parts";
 }
 ```
 
@@ -25,11 +26,34 @@ Add `imp` as a flake input:
 
 ### With flake-parts
 
+`imp` provides a flake-parts module that auto-loads outputs from a directory:
+
 ```nix
 {
-  outputs = inputs: inputs.flake-parts.lib.mkFlake { inherit inputs; }
-    (inputs.imp ./nix);
+  outputs = inputs@{ flake-parts, imp, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      imports = [ imp.flakeModules.default ];
+
+      systems = [ "x86_64-linux" "aarch64-linux" ];
+
+      imp = {
+        src = ./outputs;            # Directory to load
+        args = { inherit inputs; }; # Extra args for all files
+      };
+    };
 }
+```
+
+Directory structure:
+
+```
+outputs/
+  perSystem/
+    packages.nix      -> perSystem.packages (receives pkgs, system, etc.)
+    devShells.nix     -> perSystem.devShells
+  nixosConfigurations/
+    server.nix        -> flake.nixosConfigurations.server
+  overlays.nix        -> flake.overlays
 ```
 
 ### As a Tree Builder
@@ -57,45 +81,43 @@ imp.treeWith lib import ./outputs
 
 Full API documentation with examples is inline in the source:
 
-| File                                           | Purpose                                         |
-| ---------------------------------------------- | ----------------------------------------------- |
-| [`src/api.nix`](src/api.nix)                   | All chainable methods (filter, map, tree, etc.) |
-| [`src/collect.nix`](src/collect.nix)           | File collection & filtering logic               |
-| [`src/tree.nix`](src/tree.nix)                 | Tree building from directories                  |
-| [`src/configTree.nix`](src/configTree.nix)     | NixOS/Home Manager config modules               |
-| [`src/flakeOutputs.nix`](src/flakeOutputs.nix) | Flake outputs with per-system detection         |
-| [`src/lib.nix`](src/lib.nix)                   | Internal utilities                              |
+| File                                         | Purpose                                         |
+| -------------------------------------------- | ----------------------------------------------- |
+| [`src/api.nix`](src/api.nix)                 | All chainable methods (filter, map, tree, etc.) |
+| [`src/collect.nix`](src/collect.nix)         | File collection & filtering logic               |
+| [`src/tree.nix`](src/tree.nix)               | Tree building from directories                  |
+| [`src/configTree.nix`](src/configTree.nix)   | NixOS/Home Manager config modules               |
+| [`src/flakeModule.nix`](src/flakeModule.nix) | Flake-parts integration module                  |
+| [`src/lib.nix`](src/lib.nix)                 | Internal utilities                              |
 
 ### Overview
 
-| Method                        | Description                                     |
-| ----------------------------- | ----------------------------------------------- |
-| `imp <path>`                  | Import directory as NixOS module                |
-| `.withLib <lib>`              | Bind nixpkgs lib (required for most operations) |
-| `.filter <pred>`              | Filter paths by predicate                       |
-| `.match <regex>`              | Filter paths by regex                           |
-| `.map <fn>`                   | Transform matched paths                         |
-| `.tree <path>`                | Build nested attrset from directory             |
-| `.treeWith <lib> <fn> <path>` | Tree with transform                             |
-| `.configTree <path>`          | Directory structure → option paths              |
-| `.flakeOutputs {...} <path>`  | Auto per-system detection                       |
-| `.leafs <path>`               | Get list of matched files                       |
-| `.addAPI <attrset>`           | Extend with custom methods                      |
+| Method                        | Description                          |
+| ----------------------------- | ------------------------------------ |
+| `imp <path>`                  | Import directory as NixOS module     |
+| `.withLib <lib>`              | Bind nixpkgs lib (required for most) |
+| `.filter <pred>`              | Filter paths by predicate            |
+| `.match <regex>`              | Filter paths by regex                |
+| `.map <fn>`                   | Transform matched paths              |
+| `.tree <path>`                | Build nested attrset from directory  |
+| `.treeWith <lib> <fn> <path>` | Tree with transform                  |
+| `.configTree <path>`          | Directory structure → option paths   |
+| `.leafs <path>`               | Get list of matched files            |
+| `.addAPI <attrset>`           | Extend with custom methods           |
+
+### flake-parts Module Options
+
+| Option             | Type   | Default     | Description                      |
+| ------------------ | ------ | ----------- | -------------------------------- |
+| `imp.src`          | path   | null        | Directory containing outputs     |
+| `imp.args`         | attrs  | {}          | Extra args passed to all files   |
+| `imp.perSystemDir` | string | "perSystem" | Subdirectory name for per-system |
+
+Files in `perSystem/` receive: `{ pkgs, lib, system, self, self', inputs, inputs', ... }`
+
+Files outside `perSystem/` receive: `{ lib, self, inputs, ... }`
 
 ## Examples
-
-### Flake with Per-System Outputs
-
-```nix
-{
-  outputs = { nixpkgs, imp, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      imp.treeWith nixpkgs.lib
-        (f: f { pkgs = nixpkgs.legacyPackages.${system}; })
-        ./outputs
-    );
-}
-```
 
 ### Config Tree (Home Manager / NixOS)
 
