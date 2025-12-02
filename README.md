@@ -71,7 +71,7 @@ importme.addAPI {
 
 ### `.withLib`
 
-Required before using `.leafs` or `.pipeTo` outside module evaluation.
+Required before using `.leafs`, `.tree`, or `.pipeTo` outside module evaluation.
 
 ```nix
 (importme.withLib pkgs.lib).leafs ./nix
@@ -83,6 +83,47 @@ Get the list of matched files (requires `.withLib` first).
 
 ```nix
 (importme.withLib lib).files
+```
+
+### `.tree`
+
+Build a nested attrset from a directory structure (requires `.withLib` first).
+
+```nix
+# Given directory:
+#   ./nix/
+#     packages/
+#       foo.nix  # { name = "foo"; }
+#       bar.nix  # { name = "bar"; }
+#     default_.nix  # { isDefault = true; }
+
+(importme.withLib lib).tree ./nix
+# Returns:
+# {
+#   default = { isDefault = true; };
+#   packages = {
+#     foo = { name = "foo"; };
+#     bar = { name = "bar"; };
+#   };
+# }
+```
+
+File/directory naming:
+
+- `foo.nix` becomes `foo` attribute
+- `foo/default.nix` becomes `foo` attribute (imports the directory)
+- `foo_.nix` becomes `foo` attribute (escape suffix for reserved names)
+- `_foo.nix` and `_foo/` are ignored (hidden, consistent with flat importer)
+
+### `.mapTree`
+
+Transform imported values in `.tree`. Multiple calls compose.
+
+```nix
+(importme.withLib lib)
+  .mapTree (x: x // { extra = true; })
+  .tree ./nix/packages
+# Each imported value gets { extra = true; } merged in
 ```
 
 ### `.initFilter`

@@ -254,4 +254,103 @@ in
     expr = lit.leafs ./fixtures/a/b/_c;
     expected = [ ./fixtures/a/b/_c/d/e.nix ];
   };
+
+  # Tree tests
+  tree."test fails if no lib has been set" = {
+    expr = it.tree ./fixtures/tree-test;
+    expectedError.type = "EvalError";
+  };
+
+  tree."test builds nested attrset from directory" = {
+    expr = lit.tree ./fixtures/tree-test;
+    expected = {
+      default = {
+        isDefault = true;
+      };
+      top = {
+        level = "top";
+      };
+      packages = {
+        foo = {
+          name = "foo";
+        };
+        bar = {
+          name = "bar";
+        };
+      };
+      modules = {
+        simple = {
+          value = "simple";
+        };
+        nested = {
+          deep = {
+            value = "deep";
+          };
+        };
+      };
+    };
+  };
+
+  tree."test can access nested attributes" = {
+    expr = (lit.tree ./fixtures/tree-test).packages.foo.name;
+    expected = "foo";
+  };
+
+  tree."test suffix_ escapes to attribute name" = {
+    expr = (lit.tree ./fixtures/tree-test).default;
+    expected = {
+      isDefault = true;
+    };
+  };
+
+  tree."test deeply nested access" = {
+    expr = (lit.tree ./fixtures/tree-test).modules.nested.deep.value;
+    expected = "deep";
+  };
+
+  tree."test filter applies to tree" = {
+    expr = (lit.filter (lib.hasInfix "packages")).tree ./fixtures/tree-test;
+    expected = {
+      packages = {
+        foo = {
+          name = "foo";
+        };
+        bar = {
+          name = "bar";
+        };
+      };
+    };
+  };
+
+  mapTree."test transforms imported values" = {
+    expr = (lit.mapTree (x: x // { extra = true; })).tree ./fixtures/tree-test/packages;
+    expected = {
+      foo = {
+        name = "foo";
+        extra = true;
+      };
+      bar = {
+        name = "bar";
+        extra = true;
+      };
+    };
+  };
+
+  mapTree."test multiple mapTrees compose" = {
+    expr =
+      ((lit.mapTree (x: x // { first = true; })).mapTree (x: x // { second = true; })).tree
+        ./fixtures/tree-test/packages;
+    expected = {
+      foo = {
+        name = "foo";
+        first = true;
+        second = true;
+      };
+      bar = {
+        name = "bar";
+        first = true;
+        second = true;
+      };
+    };
+  };
 }

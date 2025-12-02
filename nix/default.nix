@@ -107,6 +107,69 @@ let
     in
     result;
 
+  # Build a nested attrset from directory structure
+  # Similar to Flakelight's autoload feature
+  buildTree =
+    {
+      lib,
+      treef ? import,
+      filterf,
+      ...
+    }:
+    root:
+    let
+      # Get directory entries
+      entries = builtins.readDir root;
+
+      # Convert a name to an attribute name
+      # - Remove .nix suffix
+      # - foo_ -> foo (escape suffix for reserved names like "default")
+      toAttrName =
+        name:
+        let
+          withoutNix = lib.removeSuffix ".nix" name;
+          unescaped = lib.removeSuffix "_" withoutNix;
+        in
+        unescaped;
+
+      # Check if a path should be included
+      # - _prefix means hidden/ignored (consistent with flat importer)
+      shouldInclude =
+        name:
+        let
+          isHidden = lib.hasPrefix "_" name;
+        in
+        !isHidden && filterf (toString root + "/" + name);
+
+      # Process a single entry
+      processEntry =
+        name: type:
+        let
+          path = root + "/${name}";
+          attrName = toAttrName name;
+        in
+        if type == "regular" && lib.hasSuffix ".nix" name then
+          { ${attrName} = treef path; }
+        else if type == "directory" then
+          let
+            defaultNix = path + "/default.nix";
+            hasDefault = builtins.pathExists defaultNix;
+          in
+          if hasDefault then
+            # Directory with default.nix - import it directly
+            { ${attrName} = treef path; }
+          else
+            # Directory without default.nix - recurse
+            { ${attrName} = buildTree { inherit lib treef filterf; } path; }
+        else
+          { };
+
+      # Filter and process all entries
+      filteredEntries = lib.filterAttrs (name: _: shouldInclude name) entries;
+      processed = lib.mapAttrsToList processEntry filteredEntries;
+    in
+    lib.foldl' (acc: x: acc // x) { } processed;
+
   compose =
     g: f: x:
     g (f x);
@@ -142,6 +205,7 @@ let
         # Accumulated configuration
         api = { };
         mapf = (i: i);
+        treef = import;
         filterf = _: true;
         paths = [ ];
 
@@ -175,6 +239,7 @@ let
             match = regex: accAttr "filterf" (and (matchesRegex regex));
             matchNot = regex: accAttr "filterf" (andNot (matchesRegex regex));
             map = mapf: accAttr "mapf" (compose mapf);
+            mapTree = treef: accAttr "treef" (compose treef);
             addPath = path: accAttr "paths" (p: p ++ [ path ]);
             addAPI = api: accAttr "api" (a: a // api);
 
@@ -189,6 +254,16 @@ let
 
             # Return a list of all filtered files.
             files = current.leafs.result;
+
+            # Build a nested attrset from directory structure
+            tree =
+              path:
+              if updated.lib == null then
+                throw "You need to call withLib before using tree."
+              else
+                buildTree {
+                  inherit (updated) lib treef filterf;
+                } path;
 
             # returns the original empty state
             new = callable;

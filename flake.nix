@@ -19,67 +19,31 @@
     }:
     let
       importme = import ./nix;
+      lib = nixpkgs.lib;
     in
     {
-      __functor = _: importme.__functor importme;
-      inherit (importme)
-        __config
-        filter
-        filterNot
-        match
-        matchNot
-        map
-        addPath
-        addAPI
-        withLib
-        initFilter
-        pipeTo
-        leafs
-        new
-        result
-        ;
-      tests = import ./tests { lib = nixpkgs.lib; };
+      tests = import ./tests { inherit lib; };
     }
+    // removeAttrs importme [
+      "files"
+      "result"
+    ]
     // flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        treefmtEval = treefmt-nix.lib.evalModule pkgs {
-          projectRootFile = "flake.nix";
-          programs.nixfmt.enable = true;
-          settings.global.excludes = [ "tests/fixtures/*" ];
+        args = {
+          inherit
+            self
+            pkgs
+            nixpkgs
+            nix-unit
+            treefmt-nix
+            ;
         };
+        # Dogfooding: use .tree to load per-system outputs from ./flake
+        outputs = ((importme.withLib lib).mapTree (f: f args)).tree ./flake;
       in
-      {
-        formatter = treefmtEval.config.build.wrapper;
-
-        checks = {
-          formatting = treefmtEval.config.build.check self;
-          nix-unit =
-            pkgs.runCommand "nix-unit-tests"
-              {
-                nativeBuildInputs = [ nix-unit.packages.${system}.default ];
-              }
-              ''
-                export HOME=$TMPDIR
-                nix-unit --expr 'import ${self}/tests { lib = import ${nixpkgs}/lib; }'
-                touch $out
-              '';
-        };
-
-        apps.tests = {
-          type = "app";
-          program = toString (
-            pkgs.writeShellScript "run-tests" ''
-              ${nix-unit.packages.${system}.default}/bin/nix-unit --flake .#tests
-            ''
-          );
-        };
-
-        devShells.default = pkgs.mkShell {
-          packages = [ nix-unit.packages.${system}.default ];
-          inputsFrom = [ treefmtEval.config.build.devShell ];
-        };
-      }
+      outputs
     );
 }
