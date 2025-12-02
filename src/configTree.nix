@@ -81,6 +81,8 @@ let
         in
         lib.foldl' lib.recursiveUpdate { } processed;
     in
-    buildFromDir root;
+    {
+      config = buildFromDir root;
+    };
 in
 buildConfigTree

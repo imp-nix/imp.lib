@@ -372,7 +372,7 @@ in
         };
         result = module mockArgs;
       in
-      result;
+      result.config;
     expected = {
       programs = {
         git = {
@@ -408,7 +408,7 @@ in
         };
         result = module mockArgs;
       in
-      result.programs.git.userName;
+      result.config.programs.git.userName;
     expected = "Test User";
   };
 
@@ -423,7 +423,7 @@ in
         };
         result = module mockArgs;
       in
-      result.services.nginx;
+      result.config.services.nginx;
     expected = {
       enable = true;
       recommendedGzipSettings = true;
@@ -441,7 +441,7 @@ in
         };
         result = module mockArgs;
       in
-      result;
+      result.config;
     expected = {
       programs = {
         git = {
@@ -467,7 +467,7 @@ in
         };
         result = module mockArgs;
       in
-      result;
+      result.config;
     expected = {
       test = {
         fromCustomArg = "hello";
