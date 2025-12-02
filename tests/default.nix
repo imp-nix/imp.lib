@@ -1,7 +1,7 @@
 # Unit tests for importme
 { lib }:
 let
-  importme = import ./../nix;
+  importme = import ./../src;
   it = importme;
   lit = it.withLib lib;
 in

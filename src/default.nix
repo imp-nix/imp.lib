@@ -1,3 +1,9 @@
+# Recursive module importer with filtering and mapping capabilities
+#
+# Can be used as:
+#   - A function: importme ./path -> NixOS module with imports
+#   - A builder: importme.filter(...).map(...).leafs ./path -> list of processed files
+#   - A tree builder: importme.withLib(lib).tree ./path -> nested attrset
 let
   perform =
     {
@@ -19,7 +25,7 @@ let
         else
           pipef (leafs lib path);
 
-      # module exists so we delay access to lib til we are part of the module system.
+      # Delays lib access until module evaluation
       module =
         { lib, ... }:
         {
@@ -43,13 +49,9 @@ let
               [ x ];
 
           nixFilter = andNot (lib.hasInfix "/_") (lib.hasSuffix ".nix");
-
           initialFilter = if initf != null then initf else nixFilter;
-
           pathFilter = compose (and filterf initialFilter) toString;
-
           otherFilter = and filterf (if initf != null then initf else (_: true));
-
           filter = x: if isPathLike x then pathFilter x else otherFilter x;
 
           isFileRelative =
@@ -62,6 +64,7 @@ let
               }
             else
               { inherit file rel; };
+
           getFileRelative = { file, rel }: if rel == null then file else rel;
 
           makeRelative =
@@ -107,74 +110,11 @@ let
     in
     result;
 
-  # Build a nested attrset from directory structure
-  # Similar to Flakelight's autoload feature
-  buildTree =
-    {
-      lib,
-      treef ? import,
-      filterf,
-      ...
-    }:
-    root:
-    let
-      # Get directory entries
-      entries = builtins.readDir root;
-
-      # Convert a name to an attribute name
-      # - Remove .nix suffix
-      # - foo_ -> foo (escape suffix for reserved names like "default")
-      toAttrName =
-        name:
-        let
-          withoutNix = lib.removeSuffix ".nix" name;
-          unescaped = lib.removeSuffix "_" withoutNix;
-        in
-        unescaped;
-
-      # Check if a path should be included
-      # - _prefix means hidden/ignored (consistent with flat importer)
-      shouldInclude =
-        name:
-        let
-          isHidden = lib.hasPrefix "_" name;
-        in
-        !isHidden && filterf (toString root + "/" + name);
-
-      # Process a single entry
-      processEntry =
-        name: type:
-        let
-          path = root + "/${name}";
-          attrName = toAttrName name;
-        in
-        if type == "regular" && lib.hasSuffix ".nix" name then
-          { ${attrName} = treef path; }
-        else if type == "directory" then
-          let
-            defaultNix = path + "/default.nix";
-            hasDefault = builtins.pathExists defaultNix;
-          in
-          if hasDefault then
-            # Directory with default.nix - import it directly
-            { ${attrName} = treef path; }
-          else
-            # Directory without default.nix - recurse
-            { ${attrName} = buildTree { inherit lib treef filterf; } path; }
-        else
-          { };
-
-      # Filter and process all entries
-      filteredEntries = lib.filterAttrs (name: _: shouldInclude name) entries;
-      processed = lib.mapAttrsToList processEntry filteredEntries;
-    in
-    lib.foldl' (acc: x: acc // x) { } processed;
-
   compose =
     g: f: x:
     g (f x);
 
-  # Applies the second filter first, to allow partial application when building the configuration.
+  # Applies f first, then g (reversed for partial application in config building)
   and =
     g: f: x:
     f x && g x;
@@ -202,38 +142,31 @@ let
   callable =
     let
       initial = {
-        # Accumulated configuration
         api = { };
         mapf = (i: i);
         treef = import;
         filterf = _: true;
         paths = [ ];
 
-        # config is our state (initial at first). this functor allows it
-        # to work as if it was a function, taking an update function
-        # that will return a new state. for example:
-        # in mergeAttrs:  `config (c: c // x)` will merge x into new config.
+        # State functor: takes an update function returning new state.
+        # Example: `config (c: c // x)` merges x into config.
         __functor =
           config: update:
           let
-            # updated is another config
             updated = update config;
-
-            # current is the result of this functor.
-            # it is not a config, but an importme object containing a __config.
             current = config update;
             boundAPI = builtins.mapAttrs (_: g: g current) updated.api;
 
-            # these two helpers are used to **append** aggregated configs.
+            # Helpers for accumulating config attributes
             accAttr = attrName: acc: config (c: mapAttr (update c) attrName acc);
             mergeAttrs = attrs: config (c: (update c) // attrs);
           in
           boundAPI
           // {
             __config = updated;
-            __functor = functor; # user-facing callable
+            __functor = functor;
 
-            # Configuration updates (accumulating)
+            # Accumulating modifiers
             filter = filterf: accAttr "filterf" (and filterf);
             filterNot = filterf: accAttr "filterf" (andNot filterf);
             match = regex: accAttr "filterf" (and (matchesRegex regex));
@@ -243,29 +176,27 @@ let
             addPath = path: accAttr "paths" (p: p ++ [ path ]);
             addAPI = api: accAttr "api" (a: a // api);
 
-            # Configuration updates (non-accumulating)
+            # Non-accumulating modifiers
             withLib = lib: mergeAttrs { inherit lib; };
             initFilter = initf: mergeAttrs { inherit initf; };
             pipeTo = pipef: mergeAttrs { inherit pipef; };
             leafs = mergeAttrs { pipef = (i: i); };
 
-            # Applies empty (for already path-configured trees)
+            # Terminal operations
             result = current [ ];
-
-            # Return a list of all filtered files.
             files = current.leafs.result;
-
-            # Build a nested attrset from directory structure
             tree =
               path:
               if updated.lib == null then
                 throw "You need to call withLib before using tree."
               else
-                buildTree {
+                import ./tree.nix {
                   inherit (updated) lib treef filterf;
                 } path;
+            treeWith =
+              lib: f: path:
+              ((current.withLib lib).mapTree f).tree path;
 
-            # returns the original empty state
             new = callable;
           };
       };

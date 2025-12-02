@@ -18,7 +18,7 @@
       ...
     }:
     let
-      importme = import ./nix;
+      importme = import ./src;
       lib = nixpkgs.lib;
     in
     {
@@ -41,8 +41,8 @@
             treefmt-nix
             ;
         };
-        # Dogfooding: use .tree to load per-system outputs from ./flake
-        outputs = ((importme.withLib lib).mapTree (f: f args)).tree ./flake;
+        # Dogfooding: use .treeWith to load per-system outputs from ./outputs
+        outputs = importme.treeWith lib (f: f args) ./outputs;
       in
       outputs
     );

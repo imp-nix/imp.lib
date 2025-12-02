@@ -1,8 +1,29 @@
 # importme
 
-Recursively imports Nix modules from a directory tree.
+Recursively import Nix files from directories - as NixOS modules or nested attrsets.
 
-## Quick Start
+## Installation
+
+```nix
+{
+  inputs.importme.url = "github:Alb-O/importme";
+}
+```
+
+## Usage Modes
+
+### 1. Module Importer
+
+Use `importme` as a function to create a NixOS/flake-parts module that imports all `.nix` files from a directory:
+
+```nix
+{ inputs, ... }:
+{
+  imports = [ (inputs.importme ./modules) ];
+}
+```
+
+With flake-parts:
 
 ```nix
 {
@@ -10,31 +31,91 @@ Recursively imports Nix modules from a directory tree.
   inputs.flake-parts.url = "github:hercules-ci/flake-parts";
 
   outputs = inputs: inputs.flake-parts.lib.mkFlake { inherit inputs; }
-   (inputs.importme ./nix);
+    (inputs.importme ./nix);
 }
 ```
 
-By default, paths containing `/_` are ignored.
+### 2. File List Builder
 
-## API
-
-### `importme <path>`
-
-Takes a path (or nested list of paths) and returns a module importing all `.nix` files found recursively.
+Chain filters and transforms to get a list of files:
 
 ```nix
-{ imports = [ (importme ./nix) ]; }
+let
+  importme = inputs.importme.withLib lib;
+in
+importme.filter (lib.hasInfix "/services/").leafs ./modules
+# Returns: [ ./modules/services/nginx.nix ./modules/services/postgres.nix ... ]
 ```
 
-### `.filter` / `.filterNot`
+### 3. Tree Builder
+
+Build nested attrsets from directory structure - useful for flake outputs:
+
+```nix
+# Directory structure:
+#   outputs/
+#     apps.nix
+#     checks.nix
+#     packages/
+#       foo.nix
+#       bar.nix
+
+importme.treeWith lib import ./outputs
+# Returns:
+# {
+#   apps = <imported from apps.nix>;
+#   checks = <imported from checks.nix>;
+#   packages = {
+#     foo = <imported from foo.nix>;
+#     bar = <imported from bar.nix>;
+#   };
+# }
+```
+
+## Naming Conventions
+
+| Path              | Attribute | Notes                               |
+| ----------------- | --------- | ----------------------------------- |
+| `foo.nix`         | `foo`     |                                     |
+| `foo/default.nix` | `foo`     | Directory with default.nix          |
+| `foo_.nix`        | `foo`     | Trailing `_` escapes reserved names |
+| `_foo.nix`        | (ignored) | Leading `_` means hidden            |
+| `_foo/`           | (ignored) | Hidden directory                    |
+
+The `_` prefix convention allows you to keep helper files or work-in-progress modules in the same directory without importing them.
+
+## API Reference
+
+### Core
+
+#### `importme <path>`
+
+Import all `.nix` files from a path as a NixOS module.
+
+```nix
+{ imports = [ (importme ./modules) ]; }
+```
+
+#### `.withLib <lib>`
+
+Required before using `.leafs`, `.files`, `.tree`, or `.treeWith`.
+
+```nix
+importme.withLib nixpkgs.lib
+```
+
+### Filtering
+
+#### `.filter <predicate>` / `.filterNot <predicate>`
 
 Filter paths by predicate. Multiple filters compose with AND.
 
 ```nix
-importme.filter (lib.hasInfix ".mod.") ./nix
+importme.filter (lib.hasInfix "/services/") ./modules
+importme.filterNot (lib.hasInfix "/deprecated/") ./modules
 ```
 
-### `.match` / `.matchNot`
+#### `.match <regex>` / `.matchNot <regex>`
 
 Filter paths by regex (uses `builtins.match`).
 
@@ -42,113 +123,219 @@ Filter paths by regex (uses `builtins.match`).
 importme.match ".*/[a-z]+@(foo|bar)\.nix" ./nix
 ```
 
-### `.map`
+#### `.initFilter <predicate>`
+
+Replace the default filter. By default, importme finds `.nix` files and excludes paths containing `/_`.
+
+```nix
+# Import markdown files instead
+importme.initFilter (lib.hasSuffix ".md") ./docs
+```
+
+### Transforming
+
+#### `.map <function>`
 
 Transform each matched path.
 
 ```nix
-importme.map (path: { imports = [ path ]; }) ./nix
+importme.map import ./packages
+# Returns list of imported values instead of paths
 ```
 
-### `.addPath`
+#### `.mapTree <function>`
 
-Prepend additional paths to search.
-
-```nix
-(importme.addPath ./vendor) ./nix
-```
-
-### `.addAPI`
-
-Extend the importme object with custom methods.
-
-```nix
-importme.addAPI {
-  maximal = self: self.addPath ./nix;
-  minimal = self: self.maximal.filter (lib.hasInfix "minimal");
-}
-```
-
-### `.withLib`
-
-Required before using `.leafs`, `.tree`, or `.pipeTo` outside module evaluation.
-
-```nix
-(importme.withLib pkgs.lib).leafs ./nix
-```
-
-### `.leafs` / `.files`
-
-Get the list of matched files (requires `.withLib` first).
-
-```nix
-(importme.withLib lib).files
-```
-
-### `.tree`
-
-Build a nested attrset from a directory structure (requires `.withLib` first).
-
-```nix
-# Given directory:
-#   ./nix/
-#     packages/
-#       foo.nix  # { name = "foo"; }
-#       bar.nix  # { name = "bar"; }
-#     default_.nix  # { isDefault = true; }
-
-(importme.withLib lib).tree ./nix
-# Returns:
-# {
-#   default = { isDefault = true; };
-#   packages = {
-#     foo = { name = "foo"; };
-#     bar = { name = "bar"; };
-#   };
-# }
-```
-
-File/directory naming:
-
-- `foo.nix` becomes `foo` attribute
-- `foo/default.nix` becomes `foo` attribute (imports the directory)
-- `foo_.nix` becomes `foo` attribute (escape suffix for reserved names)
-- `_foo.nix` and `_foo/` are ignored (hidden, consistent with flat importer)
-
-### `.mapTree`
-
-Transform imported values in `.tree`. Multiple calls compose.
+Transform values when using `.tree`. Composes with multiple calls.
 
 ```nix
 (importme.withLib lib)
-  .mapTree (x: x // { extra = true; })
-  .tree ./nix/packages
-# Each imported value gets { extra = true; } merged in
+  .mapTree (drv: drv // { meta.priority = 5; })
+  .tree ./packages
 ```
 
-### `.initFilter`
+### Tree Building
 
-Replace the default filter (`.nix` files, excluding `/_` paths).
+#### `.tree <path>`
+
+Build a nested attrset from directory structure. Requires `.withLib`.
 
 ```nix
-importme.initFilter (lib.hasSuffix ".md")
+(importme.withLib lib).tree ./outputs
 ```
 
-### `.new`
+#### `.treeWith <lib> <transform> <path>`
 
-Returns a fresh `importme` with empty state.
+Convenience function combining `.withLib`, `.mapTree`, and `.tree`.
+
+```nix
+# These are equivalent:
+((importme.withLib lib).mapTree (f: f args)).tree ./outputs
+importme.treeWith lib (f: f args) ./outputs
+```
+
+Real-world example - loading per-system flake outputs:
+
+```nix
+{
+  outputs = { self, nixpkgs, importme, ... }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
+        args = { inherit self pkgs; };
+      in
+      importme.treeWith nixpkgs.lib (f: f args) ./outputs
+    );
+}
+```
+
+Where each file in `./outputs/` is a function taking `args`:
+
+```nix
+# outputs/packages.nix
+{ pkgs, ... }: {
+  hello = pkgs.hello;
+  cowsay = pkgs.cowsay;
+}
+```
+
+### File Lists
+
+#### `.leafs <path>` / `.files`
+
+Get the list of matched files. Requires `.withLib`.
+
+```nix
+(importme.withLib lib).leafs ./modules
+# Returns: [ ./modules/foo.nix ./modules/bar.nix ... ]
+
+# Or with pre-configured paths:
+importme.withLib lib
+  |> (i: i.addPath ./modules)
+  |> (i: i.filter (lib.hasInfix "/services/"))
+  |> (i: i.files)
+```
+
+#### `.pipeTo <function> <path>`
+
+Apply a function to the file list.
+
+```nix
+(importme.withLib lib).pipeTo builtins.length ./modules
+# Returns: 42
+```
+
+### Extending
+
+#### `.addPath <path>`
+
+Add additional paths to search.
+
+```nix
+importme
+  |> (i: i.addPath ./modules)
+  |> (i: i.addPath ./vendor)
+  |> (i: i.leafs)
+```
+
+#### `.addAPI <attrset>`
+
+Extend importme with custom methods. Methods receive `self` for chaining.
+
+```nix
+let
+  myImporter = importme.addAPI {
+    services = self: self.filter (lib.hasInfix "/services/");
+    packages = self: self.filter (lib.hasInfix "/packages/");
+  };
+in
+myImporter.services ./nix
+```
+
+#### `.new`
+
+Returns a fresh importme with empty state, preserving custom API.
+
+## Examples
+
+### Organizing NixOS Modules
+
+```
+nixos/
+  modules/
+    services/
+      nginx.nix
+      postgres.nix
+    hardware/
+      gpu.nix
+    _helpers.nix  # ignored - helper functions
+```
+
+```nix
+{ imports = [ (importme ./nixos/modules) ]; }
+```
+
+### Flake with Per-System Outputs
+
+```
+outputs/
+  apps.nix
+  checks.nix
+  devShells.nix
+  packages/
+    foo.nix
+    bar.nix
+```
+
+```nix
+# flake.nix
+{
+  outputs = { nixpkgs, importme, flake-utils, ... }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
+      in
+      importme.treeWith nixpkgs.lib (f: f { inherit pkgs; }) ./outputs
+    );
+}
+
+# outputs/apps.nix
+{ pkgs, ... }: {
+  hello = { type = "app"; program = "${pkgs.hello}/bin/hello"; };
+}
+
+# outputs/packages/foo.nix
+{ pkgs, ... }:
+pkgs.stdenv.mkDerivation { name = "foo"; /* ... */ }
+```
+
+### Conditional Module Loading
+
+```nix
+let
+  importme = inputs.importme.withLib lib;
+
+  serverModules = importme.filter (lib.hasInfix "/server/") ./modules;
+  desktopModules = importme.filter (lib.hasInfix "/desktop/") ./modules;
+in
+{
+  imports = [
+    (if isServer then serverModules else desktopModules)
+  ];
+}
+```
 
 ## Testing
 
 ```sh
-nix run .#tests
-nix flake check
+nix run .#tests    # Run unit tests
+nix flake check    # Full check including formatting
 ```
 
 ## Attribution
 
-Project originally written by @vic under the name `import-tree`: https://github.com/vic/import-tree
+- Originally written by @vic as [import-tree](https://github.com/vic/import-tree).
+- `.tree` inspired by [flakelight](https://github.com/nix-community/flakelight)'s autoload feature.
 
 ## License
 
-Apache-2.0 License, see [LICENSE](LICENSE) file for details.
+Apache-2.0 - see [LICENSE](LICENSE).
