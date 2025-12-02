@@ -196,6 +196,61 @@ Where each file in `./outputs/` is a function taking `args`:
 }
 ```
 
+### Config Tree Building
+
+Build NixOS/Home Manager modules where the directory structure becomes the option path.
+
+#### `.configTree <path>`
+
+Build a module from directory structure. Each file is a function receiving module args
+(`{ config, lib, pkgs, ... }`) and returning config values. Requires `.withLib`.
+
+```nix
+# Directory structure:
+#   home/
+#     programs/
+#       git.nix
+#       zsh.nix
+#     services/
+#       syncthing.nix
+
+# home/programs/git.nix
+{ pkgs, ... }: {
+  enable = true;
+  userName = "Alice";
+}
+
+# Usage - the file path becomes the option path:
+{ inputs, ... }:
+{
+  imports = [ ((inputs.imp.withLib lib).configTree ./home) ];
+  # Equivalent to manually writing:
+  # programs.git = { enable = true; userName = "Alice"; };
+  # programs.zsh = { ... };
+  # services.syncthing = { ... };
+}
+```
+
+#### `.configTreeWith <extraArgs> <path>`
+
+Like `.configTree` but passes extra arguments to each file.
+
+```nix
+# home/programs/git.nix
+{ pkgs, myCustomArg, ... }: {
+  enable = true;
+  userName = myCustomArg.userName;
+}
+
+# Usage:
+{ inputs, ... }:
+{
+  imports = [
+    ((inputs.imp.withLib lib).configTreeWith { myCustomArg = { userName = "Bob"; }; } ./home)
+  ];
+}
+```
+
 ### File Lists
 
 #### `.leafs <path>` / `.files`

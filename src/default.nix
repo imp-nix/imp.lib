@@ -197,6 +197,28 @@ let
               lib: f: path:
               ((current.withLib lib).mapTree f).tree path;
 
+            # Config tree: builds a module where directory structure = option paths
+            # Each file is a function receiving module args, returning config values
+            configTree =
+              path:
+              if updated.lib == null then
+                throw "You need to call withLib before using configTree."
+              else
+                import ./configTree.nix {
+                  inherit (updated) lib filterf;
+                } path;
+
+            # Config tree with extra args passed to each file
+            configTreeWith =
+              extraArgs: path:
+              if updated.lib == null then
+                throw "You need to call withLib before using configTreeWith."
+              else
+                import ./configTree.nix {
+                  inherit (updated) lib filterf;
+                  inherit extraArgs;
+                } path;
+
             new = callable;
           };
       };

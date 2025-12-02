@@ -353,4 +353,125 @@ in
       };
     };
   };
+
+  # Config tree tests - builds modules where path = option path
+  configTree."test fails if no lib has been set" = {
+    expr = it.configTree ./fixtures/config-tree;
+    expectedError.type = "EvalError";
+  };
+
+  configTree."test builds nested config from directory structure" = {
+    expr =
+      let
+        module = lit.configTree ./fixtures/config-tree;
+        # Simulate module evaluation by calling with mock args
+        mockArgs = {
+          config = { };
+          lib = lib;
+          pkgs = { };
+        };
+        result = module mockArgs;
+      in
+      result;
+    expected = {
+      programs = {
+        git = {
+          enable = true;
+          userName = "Test User";
+        };
+        zsh = {
+          enable = true;
+          autosuggestion.enable = true;
+        };
+      };
+      services = {
+        nginx = {
+          enable = true;
+          recommendedGzipSettings = true;
+        };
+      };
+      top-level = {
+        value = "top";
+        computed = "ab";
+      };
+    };
+  };
+
+  configTree."test can access deeply nested config values" = {
+    expr =
+      let
+        module = lit.configTree ./fixtures/config-tree;
+        mockArgs = {
+          config = { };
+          lib = lib;
+          pkgs = { };
+        };
+        result = module mockArgs;
+      in
+      result.programs.git.userName;
+    expected = "Test User";
+  };
+
+  configTree."test directory with default.nix is treated as single value" = {
+    expr =
+      let
+        module = lit.configTree ./fixtures/config-tree;
+        mockArgs = {
+          config = { };
+          lib = lib;
+          pkgs = { };
+        };
+        result = module mockArgs;
+      in
+      result.services.nginx;
+    expected = {
+      enable = true;
+      recommendedGzipSettings = true;
+    };
+  };
+
+  configTree."test filter applies to configTree" = {
+    expr =
+      let
+        module = (lit.filter (lib.hasInfix "programs")).configTree ./fixtures/config-tree;
+        mockArgs = {
+          config = { };
+          lib = lib;
+          pkgs = { };
+        };
+        result = module mockArgs;
+      in
+      result;
+    expected = {
+      programs = {
+        git = {
+          enable = true;
+          userName = "Test User";
+        };
+        zsh = {
+          enable = true;
+          autosuggestion.enable = true;
+        };
+      };
+    };
+  };
+
+  configTreeWith."test passes extra args to config files" = {
+    expr =
+      let
+        module = lit.configTreeWith { customArg = "hello"; } ./fixtures/config-tree-extra;
+        mockArgs = {
+          config = { };
+          lib = lib;
+          pkgs = { };
+        };
+        result = module mockArgs;
+      in
+      result;
+    expected = {
+      test = {
+        fromCustomArg = "hello";
+      };
+    };
+  };
 }
