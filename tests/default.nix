@@ -474,4 +474,140 @@ in
       };
     };
   };
+
+  # Flake outputs tests - auto per-system detection
+  flakeOutputs."test files with pkgs are wrapped per-system" = {
+    expr =
+      let
+        mockPkgsFor = system: { hello = "hello-${system}"; };
+        outputs = lit.flakeOutputs {
+          systems = [
+            "x86_64-linux"
+            "aarch64-linux"
+          ];
+          pkgsFor = mockPkgsFor;
+          args = { };
+        } ./fixtures/flake-outputs;
+      in
+      {
+        hasX86 = outputs.packages ? x86_64-linux;
+        hasAarch = outputs.packages ? aarch64-linux;
+        x86Value = outputs.packages.x86_64-linux.testValue;
+        aarchHello = outputs.packages.aarch64-linux.hello;
+      };
+    expected = {
+      hasX86 = true;
+      hasAarch = true;
+      x86Value = "from-packages";
+      aarchHello = "hello-aarch64-linux";
+    };
+  };
+
+  flakeOutputs."test files with system (not pkgs) are wrapped per-system" = {
+    expr =
+      let
+        mockPkgsFor = system: { };
+        outputs = lit.flakeOutputs {
+          systems = [
+            "x86_64-linux"
+            "aarch64-darwin"
+          ];
+          pkgsFor = mockPkgsFor;
+          args = { };
+        } ./fixtures/flake-outputs;
+      in
+      {
+        x86System = outputs.perSystem.systemOnly.x86_64-linux.currentSystem;
+        darwinSystem = outputs.perSystem.systemOnly.aarch64-darwin.currentSystem;
+      };
+    expected = {
+      x86System = "x86_64-linux";
+      darwinSystem = "aarch64-darwin";
+    };
+  };
+
+  flakeOutputs."test files without pkgs/system are NOT wrapped" = {
+    expr =
+      let
+        mockPkgsFor = system: { };
+        outputs = lit.flakeOutputs {
+          systems = [ "x86_64-linux" ];
+          pkgsFor = mockPkgsFor;
+          args = {
+            lib = lib;
+          };
+        } ./fixtures/flake-outputs;
+      in
+      {
+        # nixosConfigurations should NOT have system keys
+        hasSystemKey = outputs.nixosConfigurations.workstation ? x86_64-linux;
+        directValue = outputs.nixosConfigurations.workstation.value;
+        type = outputs.nixosConfigurations.workstation.type;
+      };
+    expected = {
+      hasSystemKey = false;
+      directValue = "workstation-config";
+      type = "nixos";
+    };
+  };
+
+  flakeOutputs."test base args are passed to non-perSystem files" = {
+    expr =
+      let
+        mockPkgsFor = system: { };
+        outputs = lit.flakeOutputs {
+          systems = [ "x86_64-linux" ];
+          pkgsFor = mockPkgsFor;
+          args = {
+            lib = lib;
+            inputs = {
+              self = "mock-self";
+            };
+          };
+        } ./fixtures/flake-outputs;
+      in
+      outputs.nixosConfigurations.server.hasInputs;
+    expected = true;
+  };
+
+  flakeOutputs."test perSystem files also receive base args" = {
+    expr =
+      let
+        mockPkgsFor = system: { hello = "pkg"; };
+        outputs = lit.flakeOutputs {
+          systems = [ "x86_64-linux" ];
+          pkgsFor = mockPkgsFor;
+          args = {
+            inputs = {
+              self = "mock-self";
+            };
+          };
+        } ./fixtures/flake-outputs;
+      in
+      outputs.devShells.x86_64-linux.hasInputs;
+    expected = true;
+  };
+
+  flakeOutputs."test nested directories work correctly" = {
+    expr =
+      let
+        mockPkgsFor = system: { };
+        outputs = lit.flakeOutputs {
+          systems = [ "x86_64-linux" ];
+          pkgsFor = mockPkgsFor;
+          args = {
+            lib = lib;
+          };
+        } ./fixtures/flake-outputs;
+      in
+      {
+        # perSystem/systemOnly.nix should be nested under perSystem
+        hasPerSystem = outputs ? perSystem;
+        hasSystemOnly = outputs.perSystem ? systemOnly;
+      };
+    expected = {
+      hasPerSystem = true;
+      hasSystemOnly = true;
+    };
+  };
 }

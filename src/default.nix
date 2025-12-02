@@ -197,6 +197,23 @@ let
               lib: f: path:
               ((current.withLib lib).mapTree f).tree path;
 
+            # Flake outputs: builds outputs with automatic per-system detection
+            # Files accepting `pkgs` or `system` are auto-wrapped with genAttrs
+            flakeOutputs =
+              {
+                systems,
+                pkgsFor,
+                args ? { },
+              }:
+              path:
+              if updated.lib == null then
+                throw "You need to call withLib before using flakeOutputs."
+              else
+                import ./flakeOutputs.nix {
+                  inherit (updated) lib treef filterf;
+                  inherit systems pkgsFor args;
+                } path;
+
             # Config tree: builds a module where directory structure = option paths
             # Each file is a function receiving module args, returning config values
             configTree =
