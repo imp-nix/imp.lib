@@ -1,4 +1,4 @@
-/*
+/**
   API method definitions for imp.
 
   This module defines all chainable methods available on the imp object.
@@ -21,16 +21,6 @@ let
     ;
 in
 
-/*
-  Builds the API methods for a given state.
-
-  Arguments:
-  - config: the state functor
-  - update: the current update function
-  - updated: the updated config state
-  - current: the current imp instance
-  - callable: reference to create fresh instances
-*/
 {
   config,
   update,
@@ -46,114 +36,229 @@ let
   mergeAttrs = attrs: config (c: (update c) // attrs);
 in
 {
-  /*
-    .filter <predicate> / .filterNot <predicate>
+  /**
     Filter paths by predicate. Multiple filters compose with AND.
 
-      imp.filter (lib.hasInfix "/services/") ./modules
-      imp.filterNot (lib.hasInfix "/deprecated/") ./modules
+    # Example
+
+    ```nix
+    imp.filter (lib.hasInfix "/services/") ./modules
+    imp.filterNot (lib.hasInfix "/deprecated/") ./modules
+    ```
+
+    # Arguments
+
+    predicate
+    : Function that receives a path string and returns boolean.
   */
-  filter = filterf: accAttr "filterf" (and filterf);
-  filterNot = filterf: accAttr "filterf" (andNot filterf);
+  filter = predicate: accAttr "filterf" (and predicate);
 
-  /*
-    .match <regex> / .matchNot <regex>
-    Filter paths by regex (uses builtins.match).
+  /**
+    Exclude paths matching predicate. Opposite of filter.
 
-      imp.match ".+services.+" ./nix
+    # Example
+
+    ```nix
+    imp.filterNot (lib.hasInfix "/deprecated/") ./modules
+    ```
+
+    # Arguments
+
+    predicate
+    : Function that receives a path string and returns boolean.
+  */
+  filterNot = predicate: accAttr "filterf" (andNot predicate);
+
+  /**
+    Filter paths by regex. Uses builtins.match.
+
+    # Example
+
+    ```nix
+    imp.match ".*[/]services[/].*" ./nix
+    ```
+
+    # Arguments
+
+    regex
+    : Regular expression string.
   */
   match = regex: accAttr "filterf" (and (matchesRegex regex));
+
+  /**
+    Exclude paths matching regex. Opposite of match.
+
+    # Example
+
+    ```nix
+    imp.matchNot ".*[/]test[/].*" ./src
+    ```
+
+    # Arguments
+
+    regex
+    : Regular expression string.
+  */
   matchNot = regex: accAttr "filterf" (andNot (matchesRegex regex));
 
-  /*
-    .initFilter <predicate>
+  /**
     Replace the default filter. By default, imp finds .nix files
-    and excludes paths containing /_.
+    and excludes paths containing underscore prefixes.
 
-      # Import markdown files instead
-      imp.initFilter (lib.hasSuffix ".md") ./docs
+    # Example
+
+    ```nix
+    # Import markdown files instead of nix files
+    imp.initFilter (lib.hasSuffix ".md") ./docs
+    ```
+
+    # Arguments
+
+    predicate
+    : Function that receives a path string and returns boolean.
   */
-  initFilter = initf: mergeAttrs { inherit initf; };
+  initFilter = predicate: mergeAttrs { initf = predicate; };
 
-  /*
-    .map <function>
-    Transform each matched path.
+  /**
+    Transform each matched path. Composes with multiple calls.
 
-      imp.map import ./packages
-      # Returns list of imported values instead of paths
+    # Example
+
+    ```nix
+    imp.map import ./packages
+    ```
+
+    # Arguments
+
+    f
+    : Transformation function applied to each path or value.
   */
-  map = mapf: accAttr "mapf" (compose mapf);
+  map = f: accAttr "mapf" (compose f);
 
-  /*
-    .mapTree <function>
-    Transform values when using `.tree`. Composes with multiple calls.
+  /**
+    Transform values when building a tree with .tree. Composes with multiple calls.
 
-      (imp.withLib lib)
-        .mapTree (drv: drv // { meta.priority = 5; })
-        .tree ./packages
+    # Example
+
+    ```nix
+    (imp.withLib lib)
+      .mapTree (drv: drv // { meta.priority = 5; })
+      .tree ./packages
+    ```
+
+    # Arguments
+
+    f
+    : Transformation function applied to each tree value.
   */
-  mapTree = treef: accAttr "treef" (compose treef);
+  mapTree = f: accAttr "treef" (compose f);
 
-  /*
-    .withLib <lib>
-    Required before using .leafs, .files, .tree, or .treeWith.
+  /**
+    Provide nixpkgs lib. Required before using .leafs, .files, .tree, or .configTree.
 
-      imp.withLib nixpkgs.lib
+    # Example
+
+    ```nix
+    imp.withLib pkgs.lib
+    imp.withLib inputs.nixpkgs.lib
+    ```
+
+    # Arguments
+
+    lib
+    : The nixpkgs lib attribute set.
   */
   withLib = lib: mergeAttrs { inherit lib; };
 
-  /*
-    .addPath <path>
+  /**
     Add additional paths to search.
 
-      imp
-        |> (i: i.addPath ./modules)
-        |> (i: i.addPath ./vendor)
-        |> (i: i.leafs)
+    # Example
+
+    ```nix
+    (imp.withLib lib)
+      .addPath ./modules
+      .addPath ./vendor
+      .leafs
+    ```
+
+    # Arguments
+
+    path
+    : Path to add to the search.
   */
   addPath = path: accAttr "paths" (p: p ++ [ path ]);
 
-  /*
-    .addAPI <attrset>
-    Extend `imp` with custom methods. Methods receive `self` for chaining.
+  /**
+    Extend imp with custom methods. Methods receive self for chaining.
 
-      let
-        myImporter = imp.addAPI {
-          services = self: self.filter (lib.hasInfix "/services/");
-          packages = self: self.filter (lib.hasInfix "/packages/");
-        };
-      in
-      myImporter.services ./nix
+    # Example
+
+    ```nix
+    let
+      myImp = imp.addAPI {
+        services = self: self.filter (lib.hasInfix "/services/");
+        packages = self: self.filter (lib.hasInfix "/packages/");
+      };
+    in
+    myImp.services ./nix
+    ```
+
+    # Arguments
+
+    api
+    : Attribute set of name = self: ... methods.
   */
   addAPI = api: accAttr "api" (a: a // api);
 
-  /*
-    .pipeTo <function>
-    Apply a function to the file list.
+  /**
+    Apply a function to the final file list.
 
-      (imp.withLib lib).pipeTo builtins.length ./modules
-      # Returns: 42
+    # Example
+
+    ```nix
+    (imp.withLib lib).pipeTo builtins.length ./modules
+    ```
+
+    # Arguments
+
+    f
+    : Function to apply to the file list.
   */
-  pipeTo = pipef: mergeAttrs { inherit pipef; };
+  pipeTo = f: mergeAttrs { pipef = f; };
 
-  /*
-    .leafs <path> / .files
+  /**
     Get the list of matched files. Requires .withLib.
 
-      (imp.withLib lib).leafs ./modules
-      # Returns: [ ./modules/foo.nix ./modules/bar.nix ... ]
+    # Example
+
+    ```nix
+    (imp.withLib lib).leafs ./modules
+    ```
   */
   leafs = mergeAttrs { pipef = (i: i); };
 
-  # Terminal operations
+  # Terminal operations (not documented - internal)
   result = current [ ];
   files = current.leafs.result;
 
-  /*
-    .tree <path>
+  /**
     Build a nested attrset from directory structure. Requires .withLib.
 
-      (imp.withLib lib).tree ./outputs
+    Directory names become attribute names. Files are imported and their
+    values placed at the corresponding path.
+
+    # Example
+
+    ```nix
+    (imp.withLib lib).tree ./outputs
+    # { packages.hello = <imported>; apps.run = <imported>; }
+    ```
+
+    # Arguments
+
+    path
+    : Root directory to build tree from.
   */
   tree =
     path:
@@ -164,27 +269,49 @@ in
         inherit (updated) lib treef filterf;
       } path;
 
-  /*
-    .treeWith <lib> <transform> <path>
+  /**
     Convenience function combining .withLib, .mapTree, and .tree.
 
-      # These are equivalent:
-      ((imp.withLib lib).mapTree (f: f args)).tree ./outputs
-      imp.treeWith lib (f: f args) ./outputs
+    # Example
+
+    ```nix
+    # These are equivalent:
+    ((imp.withLib lib).mapTree (f: f args)).tree ./outputs
+    imp.treeWith lib (f: f args) ./outputs
+    ```
+
+    # Arguments
+
+    lib
+    : The nixpkgs lib attribute set.
+
+    f
+    : Transformation function for tree values.
+
+    path
+    : Root directory to build tree from.
   */
   treeWith =
     lib: f: path:
     ((current.withLib lib).mapTree f).tree path;
 
-  /*
-    .configTree <path>
-    Build a module where directory structure maps to option paths.
+  /**
+    Build a module where directory structure maps to NixOS option paths.
     Each file receives module args and returns config values.
 
-      { inputs, ... }:
-      {
-        imports = [ ((inputs.imp.withLib lib).configTree ./home) ];
-      }
+    # Example
+
+    ```nix
+    { inputs, lib, ... }: {
+      imports = [ ((inputs.imp.withLib lib).configTree ./config) ];
+    }
+    # File ./config/programs/git.nix sets config.programs.git
+    ```
+
+    # Arguments
+
+    path
+    : Root directory containing config files.
   */
   configTree =
     path:
@@ -195,11 +322,22 @@ in
         inherit (updated) lib filterf;
       } path;
 
-  /*
-    .configTreeWith <extraArgs> <path>
+  /**
     Like .configTree but passes extra arguments to each file.
 
-      ((inputs.imp.withLib lib).configTreeWith { myArg = "value"; } ./home)
+    # Example
+
+    ```nix
+    (imp.withLib lib).configTreeWith { myArg = "value"; } ./config
+    ```
+
+    # Arguments
+
+    extraArgs
+    : Additional arguments passed to each config file.
+
+    path
+    : Root directory containing config files.
   */
   configTreeWith =
     extraArgs: path:
@@ -211,30 +349,26 @@ in
         inherit extraArgs;
       } path;
 
-  /*
-    .mergeConfigTrees [<options>] <paths>
+  /**
     Merge multiple config trees into a single module.
 
-    Can be called two ways:
-      imp.mergeConfigTrees [ path1 path2 ]           # uses defaults
-      imp.mergeConfigTrees { strategy = "merge"; } [ path1 path2 ]
+    # Example
 
-    Options:
-      - strategy: "override" (default) or "merge"
-        - "override": later trees completely override earlier (recursiveUpdate)
-        - "merge": use mkMerge for module system semantics (lists concat, etc.)
-      - extraArgs: additional arguments passed to each config file
+    ```nix
+    # Later trees override earlier (default)
+    (imp.withLib lib).mergeConfigTrees [ ./base ./overrides ]
 
-    Examples:
+    # With mkMerge semantics
+    (imp.withLib lib).mergeConfigTrees { strategy = "merge"; } [ ./base ./local ]
+    ```
 
-      # Default: later overrides earlier
-      imp.mergeConfigTrees [ ../shell ./. ]
+    # Arguments
 
-      # With mkMerge: lists concatenate, attrs merge
-      imp.mergeConfigTrees { strategy = "merge"; } [ ../shell ./. ]
+    options (optional)
+    : Attribute set with strategy ("override" or "merge") and extraArgs.
 
-      # With extra args
-      imp.mergeConfigTrees { extraArgs = { foo = "bar"; }; } [ ../shell ./. ]
+    paths
+    : List of directories to merge.
   */
   mergeConfigTrees =
     arg:
@@ -254,30 +388,40 @@ in
         extraArgs = arg.extraArgs or { };
       } paths;
 
-  /*
-    .new
-    Returns a fresh imp with empty state, preserving custom API.
+  /**
+    Returns a fresh imp instance with empty state, preserving custom API extensions.
+
+    # Example
+
+    ```nix
+    let
+      customImp = imp.addAPI { myMethod = self: self.filter predicate; };
+      fresh = customImp.new;
+    in
+    fresh.myMethod ./src
+    ```
   */
   new = callable;
 
-  /*
-    .imports <list of items>
-    Build a modules list from mixed items.
+  /**
+    Build a modules list from mixed items. Handles paths, registry nodes, and modules.
 
-    Handles:
-    - Paths: imported automatically
-    - Registry nodes (with __path): path extracted and imported
-    - Everything else (attrsets, functions, etc.): passed through as-is
+    # Example
 
-    This allows a single unified modules list:
+    ```nix
+    modules = imp.imports [
+      registry.hosts.server
+      registry.modules.nixos.base
+      ./local-module.nix
+      inputs.home-manager.nixosModules.home-manager
+      { services.openssh.enable = true; }
+    ];
+    ```
 
-      modules = imp.imports [
-        registry.hosts.server                        # path -> imported
-        registry.modules.nixos.base                  # path -> imported
-        registry.modules.nixos.features.hardening    # path -> imported
-        inputs.home-manager.nixosModules.home-manager # module -> passed through
-        { services.openssh.enable = true; }          # attrset -> passed through
-      ];
+    # Arguments
+
+    items
+    : List of paths, registry nodes, or module values.
   */
   imports =
     items:
@@ -293,23 +437,18 @@ in
         else
           item;
     in
-    map process items;
+    builtins.map process items;
 
-  /*
-    .analyze
-    Namespace for dependency analysis and visualization functions.
+  /**
+    Namespace for dependency analysis and visualization.
 
-    Analyze a registry to discover module relationships:
+    # Example
 
-      graph = imp.analyze.registry { registry = myRegistry; }
-
-    Format the graph as HTML:
-
-      htmlString = imp.analyze.toHtml graph
-
-    Get as JSON-serializable data:
-
-      jsonData = imp.analyze.toJson graph
+    ```nix
+    graph = (imp.withLib lib).analyze.registry { registry = myRegistry; }
+    html = (imp.withLib lib).analyze.toHtml graph
+    json = (imp.withLib lib).analyze.toJson graph
+    ```
   */
   analyze =
     if updated.lib == null then

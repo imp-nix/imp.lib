@@ -9,8 +9,100 @@
 }:
 let
   visualizeLib = import ../../src/visualize.nix { inherit lib; };
-  siteDir = ../../site;
   opener = if pkgs.stdenv.isDarwin then "open" else "xdg-open";
+
+  # mdformat with plugins (same as formatter.nix)
+  mdformat = pkgs.mdformat.withPlugins (
+    ps: with ps; [
+      mdformat-gfm
+      mdformat-frontmatter
+      mdformat-footnote
+    ]
+  );
+
+  # Standalone utilities section (same as in packages.nix)
+  standaloneSection = ''
+
+    ## Standalone Utilities
+
+    These functions work without calling `.withLib` first.
+
+    ### `imp.registry` {#imp.registry}
+
+    Build a registry from a directory structure. Requires `.withLib`.
+
+    #### Example
+
+    ```nix
+    registry = (imp.withLib lib).registry ./nix
+    # => { hosts.server = <path>; modules.nixos.base = <path>; ... }
+    ```
+
+    ### `imp.collectInputs` {#imp.collectInputs}
+
+    Scan directories for `__inputs` declarations and collect them.
+
+    #### Example
+
+    ```nix
+    imp.collectInputs ./outputs
+    # => { treefmt-nix = { url = "github:numtide/treefmt-nix"; }; }
+    ```
+
+    ### `imp.formatFlake` {#imp.formatFlake}
+
+    Format collected inputs as a flake.nix string.
+
+    #### Example
+
+    ```nix
+    imp.formatFlake {
+      description = "My flake";
+      coreInputs = { nixpkgs.url = "github:nixos/nixpkgs"; };
+      collectedInputs = imp.collectInputs ./outputs;
+    }
+    ```
+
+    ### `imp.collectAndFormatFlake` {#imp.collectAndFormatFlake}
+
+    Convenience function combining collectInputs and formatFlake.
+
+    #### Example
+
+    ```nix
+    imp.collectAndFormatFlake {
+      src = ./outputs;
+      coreInputs = { nixpkgs.url = "github:nixos/nixpkgs"; };
+      description = "My flake";
+    }
+    ```
+  '';
+
+  # Script to generate API reference
+  generateApiRef = pkgs.writeShellScript "generate-api-ref" ''
+    set -e
+    SITE_DIR="$1"
+    SRC_DIR="$2"
+
+    {
+      echo "# API Methods"
+      echo ""
+      echo "<!-- Auto-generated from src/api.nix - do not edit -->"
+      echo ""
+      ${pkgs.nixdoc}/bin/nixdoc \
+        --file "$SRC_DIR/api.nix" \
+        --category "" \
+        --description "" \
+        --prefix "imp" \
+        --anchor-prefix ""
+      cat <<'STANDALONE'
+    ${standaloneSection}
+    STANDALONE
+    } > "$SITE_DIR/src/reference/methods.md"
+
+    # Format the generated markdown
+    ${lib.getExe mdformat} "$SITE_DIR/src/reference/methods.md"
+  '';
 in
 {
   tests = {
@@ -23,22 +115,17 @@ in
     );
   };
 
-  /*
+  /**
     Visualize registry dependencies as an interactive HTML graph.
 
     Usage:
-      nix run .#visualize -- <path-to-nix-directory> [--format=html|json]
+      nix run .#visualize -- <path-to-nix-directory>
 
     Examples:
       nix run .#visualize -- ./nix > deps.html
 
     The tool scans the directory for a registry structure and analyzes
     all modules for cross-references.
-
-    Note: This standalone version requires a path argument and does runtime
-    evaluation. For pre-configured visualization of your own flake's registry,
-    use `nix run .#imp-vis` (available when using the imp flakeModule
-    with registry.src set).
   */
   visualize = {
     type = "app";
@@ -64,6 +151,11 @@ in
           echo "Error: ./site directory not found. Run from the imp flake root."
           exit 1
         fi
+
+        echo "Generating API reference from src/api.nix..."
+        ${generateApiRef} ./site ./src
+
+        echo "Starting mdbook server..."
         ${pkgs.mdbook}/bin/mdbook serve ./site &
         pid=$!
         sleep 1
@@ -75,10 +167,18 @@ in
 
   build-docs = {
     type = "app";
-    meta.description = "Build the Imp documentation";
+    meta.description = "Build the Imp documentation to ./docs";
     program = toString (
       pkgs.writeShellScript "build-docs" ''
-        ${pkgs.mdbook}/bin/mdbook build ${siteDir} --dest-dir "$(pwd)/docs"
+        if [ ! -d "./site" ]; then
+          echo "Error: ./site directory not found. Run from the imp flake root."
+          exit 1
+        fi
+
+        echo "Generating API reference from src/api.nix..."
+        ${generateApiRef} ./site ./src
+
+        ${pkgs.mdbook}/bin/mdbook build ./site --dest-dir "$(pwd)/docs"
         echo "Documentation built to ./docs"
       ''
     );
