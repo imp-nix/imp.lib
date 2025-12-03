@@ -4,7 +4,6 @@ A Nix library for organizing flakes with directory-based imports, named module r
 
 Primarily inspired by @vic's [Dendritic pattern (and related projects)](https://dendrix.oeiuwq.com/Dendritic.html).
 
-
 ## Installation
 
 ```nix

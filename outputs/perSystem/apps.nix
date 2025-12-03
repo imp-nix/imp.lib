@@ -5,6 +5,7 @@
   nixpkgs,
   nixdoc,
   self,
+  inputs,
   lib,
   ...
 }:
@@ -22,6 +23,44 @@ let
       mdformat-footnote
     ]
   );
+
+  # Render options from flakeModule (same as packages.nix)
+  renderOptionsLib = import ../../src/render-options.nix { inherit lib; };
+  flake-parts-lib = {
+    mkPerSystemOption = f: f { };
+  };
+  flakeModuleOptions =
+    (import ../../src/flakeModule.nix {
+      inherit
+        lib
+        flake-parts-lib
+        inputs
+        self
+        ;
+      config = {
+        imp = {
+          src = null;
+          args = { };
+          perSystemDir = "perSystem";
+          registry = {
+            name = "registry";
+            src = null;
+            modules = { };
+            migratePaths = [ ];
+          };
+          flakeFile = {
+            enable = false;
+            path = self + "/flake.nix";
+            description = "";
+            coreInputs = { };
+            outputsFile = "./outputs.nix";
+            header = "";
+          };
+        };
+        systems = [ ];
+      };
+    }).options;
+  optionsMarkdown = renderOptionsLib.render flakeModuleOptions;
 
   # Standalone utilities section (same as in packages.nix)
   standaloneSection = ''
@@ -87,6 +126,7 @@ let
     SITE_DIR="$1"
     SRC_DIR="$2"
     README_FILE="$3"
+    OPTIONS_MD="$4"
 
     # Copy README.md to site/src for Introduction page
     cp "$README_FILE" "$SITE_DIR/src/README.md"
@@ -148,8 +188,12 @@ let
     STANDALONE
     } > "$SITE_DIR/src/reference/methods.md"
 
+    # Copy pre-generated options
+    echo "$OPTIONS_MD" > "$SITE_DIR/src/reference/options.md"
+
     # Format the generated markdown
     ${lib.getExe mdformat} "$SITE_DIR/src/reference/methods.md"
+    ${lib.getExe mdformat} "$SITE_DIR/src/reference/options.md"
   '';
 in
 {
@@ -201,7 +245,7 @@ in
         fi
 
         echo "Generating API reference from src/*.nix..."
-        ${generateApiRef} ./site ./src ./README.md
+        ${generateApiRef} ./site ./src ./README.md ${lib.escapeShellArg optionsMarkdown}
 
         echo "Starting mdbook server..."
         ${pkgs.mdbook}/bin/mdbook serve ./site &
@@ -224,7 +268,7 @@ in
         fi
 
         echo "Generating API reference from src/*.nix..."
-        ${generateApiRef} ./site ./src ./README.md
+        ${generateApiRef} ./site ./src ./README.md ${lib.escapeShellArg optionsMarkdown}
 
         ${pkgs.mdbook}/bin/mdbook build ./site --dest-dir "$(pwd)/docs"
         echo "Documentation built to ./docs"

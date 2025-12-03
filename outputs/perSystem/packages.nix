@@ -3,6 +3,8 @@
   lib,
   treefmt-nix,
   nixdoc,
+  self,
+  inputs,
   ...
 }:
 let
@@ -21,6 +23,49 @@ let
       mdformat-footnote
     ]
   );
+
+  # Render options from flakeModule
+  renderOptionsLib = import ../../src/render-options.nix { inherit lib; };
+
+  # Mock flake-parts-lib for option extraction
+  flake-parts-lib = {
+    mkPerSystemOption = f: f { };
+  };
+
+  # Import the module to get its options (with minimal mock context)
+  flakeModuleOptions =
+    (import ../../src/flakeModule.nix {
+      inherit
+        lib
+        flake-parts-lib
+        inputs
+        self
+        ;
+      config = {
+        imp = {
+          src = null;
+          args = { };
+          perSystemDir = "perSystem";
+          registry = {
+            name = "registry";
+            src = null;
+            modules = { };
+            migratePaths = [ ];
+          };
+          flakeFile = {
+            enable = false;
+            path = self + "/flake.nix";
+            description = "";
+            coreInputs = { };
+            outputsFile = "./outputs.nix";
+            header = "";
+          };
+        };
+        systems = [ ];
+      };
+    }).options;
+
+  optionsMarkdown = renderOptionsLib.render flakeModuleOptions;
 
   # Standalone utilities section (defined in default.nix, not api.nix)
   standaloneSection = ''
@@ -88,8 +133,11 @@ let
           nixdocBin
           mdformat
         ];
-        passAsFile = [ "standaloneSection" ];
-        inherit standaloneSection;
+        passAsFile = [
+          "standaloneSection"
+          "optionsMarkdown"
+        ];
+        inherit standaloneSection optionsMarkdown;
       }
       ''
         mkdir -p $out
@@ -148,8 +196,12 @@ let
           cat $standaloneSectionPath
         } > $out/methods.md
 
+        # Generate options reference
+        cat $optionsMarkdownPath > $out/options.md
+
         # Format the generated markdown
         mdformat $out/methods.md
+        mdformat $out/options.md
       '';
 
   # Build site with generated reference
@@ -157,6 +209,7 @@ let
     cp -r ${siteDir} $out
     chmod -R +w $out
     cp ${apiReference}/methods.md $out/src/reference/methods.md
+    cp ${apiReference}/options.md $out/src/reference/options.md
     cp ${readmeFile} $out/src/README.md
   '';
 in
