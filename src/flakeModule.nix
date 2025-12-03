@@ -340,6 +340,7 @@ in
           migration = migrateLib.detectRenames {
             inherit registry;
             paths = migratePaths;
+            astGrep = "${pkgs.ast-grep}/bin/ast-grep";
           };
         in
         {
@@ -349,7 +350,7 @@ in
           # 1. Scans files for registry.X.Y patterns
           # 2. Compares against current registry to find broken references
           # 3. Suggests mappings from old names to new names
-          # 4. Generates sed commands to fix all references
+          # 4. Uses ast-grep for AST-aware replacements
           #
           # Run: nix run .#imp-registry
           apps.imp-registry = {

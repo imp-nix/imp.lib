@@ -148,16 +148,16 @@ let
     Returns: {
       brokenRefs = [ { file = ...; ref = "home.alice"; } ... ];
       suggestions = { "home.alice" = "users.alice"; ... };
-      sedCommands = [ "sed -i 's/registry\\.home\\./registry.users./g' file.nix" ... ];
+      commands = [ "ast-grep ..." ... ];
     }
 
-    The `root` parameter is the flake's self.outPath, used to convert
-    store paths back to relative paths for display.
+    The `astGrep` parameter is the path to the ast-grep binary.
   */
   detectRenames =
     {
       registry,
       paths,
+      astGrep ? "ast-grep",
     }:
     let
       # Collect all nix files
@@ -184,14 +184,10 @@ let
         )
       );
 
-      # Generate sed commands (just the sed part, files added later)
-      sedCommands = mapAttrsToList (
-        old: new:
-        let
-          # Escape dots for sed regex
-          oldEscaped = builtins.replaceStrings [ "." ] [ "\\." ] old;
-        in
-        "sed -i 's/registry\\.${oldEscaped}/registry.${new}/g'"
+      # Generate ast-grep commands for each rename
+      # Match the exact broken path and replace with the new path
+      astGrepCommands = mapAttrsToList (
+        old: new: "${astGrep} --lang nix --pattern 'registry.${old}' --rewrite 'registry.${new}'"
       ) suggestions;
 
       # Files that need updating (store paths)
@@ -224,7 +220,7 @@ let
         if affectedFiles == [ ] then
           [ ]
         else
-          map (cmd: "${cmd} ${concatStringsSep " " affectedFiles}") sedCommands;
+          map (cmd: "${cmd} ${concatStringsSep " " affectedFiles}") astGrepCommands;
 
       # Shell script to run all migrations
       script = ''
@@ -250,12 +246,20 @@ let
 
               if [[ "''${1:-}" == "--apply" ]]; then
                 echo "Applying fixes..."
-                ${concatStringsSep "\n" (map (cmd: "${cmd} ${concatStringsSep " " affectedFiles}") sedCommands)}
+                ${concatStringsSep "\n" (
+                  map (cmd: "${cmd} --update-all ${concatStringsSep " " affectedFiles}") astGrepCommands
+                )}
                 echo "Done!"
               else
                 echo "Commands to apply:"
                 ${concatStringsSep "\n" (
-                  map (cmd: ''echo "  ${cmd} ${concatStringsSep " " affectedFiles}"'') sedCommands
+                  map (
+                    cmd:
+                    let
+                      escaped = builtins.replaceStrings [ "$" ] [ "\\$" ] cmd;
+                    in
+                    ''echo "  ${escaped} ${concatStringsSep " " affectedFiles}"''
+                  ) astGrepCommands
                 )}
                 echo ""
                 echo "Run with --apply to execute these commands."

@@ -238,8 +238,10 @@ When directories are renamed, registry paths change. The `imp-registry` app dete
 
 ```sh
 # Detect renames and see suggestions
+nix run .#imp-registry
+
+# Apply fixes automatically
 nix run .#imp-registry -- --apply
-# `--apply` to run fixes instead of just showing the suggested sed command
 ```
 
 Example output after renaming `home/` to `users/`:
@@ -250,20 +252,21 @@ Registry Migration
 
 Detected renames:
   home.alice -> users.alice
-  home.bob -> users.bob
 
 Affected files:
-  /path/to/outputs/nixosConfigurations/server.nix
+  nix/outputs/nixosConfigurations/server.nix
 
-Applying fixes...
-Done!
+Commands to apply:
+  ast-grep --lang nix --pattern 'registry.home.alice' --rewrite 'registry.users.alice' nix/outputs/...
+
+Run with --apply to execute these commands.
 ```
 
 The tool:
 1. Scans files for `registry.X.Y` patterns
 2. Compares against current registry to find broken references
 3. Matches old paths to new paths by leaf name (e.g., `home.alice` → `users.alice`)
-4. Runs `sed` to update all affected files
+4. Uses [ast-grep](https://ast-grep.github.io/) for AST-aware replacements (handles multi-line expressions correctly)
 
 ### Collect Inputs
 
