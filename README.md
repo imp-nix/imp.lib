@@ -116,6 +116,7 @@ Click to expand overview sections below:
 | ----------------------------- | ------------------------------------ |
 | `imp <path>`                  | Import directory as NixOS module     |
 | `.withLib <lib>`              | Bind nixpkgs lib (required for most) |
+| `.imports <list>`             | Import paths, pass through modules   |
 | `.filter <pred>`              | Filter paths by predicate            |
 | `.match <regex>`              | Filter paths by regex                |
 | `.map <fn>`                   | Transform matched paths              |
@@ -265,9 +266,9 @@ in
 Reference modules by name instead of relative paths. The registry maps directory structure to named modules:
 
 ```
-nix/
-  home/
-    alice/default.nix  -> registry.home.alice
+registry/
+  users/
+    alice/default.nix  -> registry.users.alice
   modules/
     nixos/             -> registry.modules.nixos (directory path)
       base.nix         -> registry.modules.nixos.base
@@ -282,34 +283,42 @@ Enable the registry in flake-parts:
 ```nix
 # nix/flake/default.nix
 inputs:
-let
-  impLib = inputs.imp.withLib nixpkgs.lib;
-  registry = impLib.registry ./..;  # Build registry from nix/ directory
-in
 flake-parts.lib.mkFlake { inherit inputs; } {
   imports = [ inputs.imp.flakeModules.default ];
 
   imp = {
     src = ../outputs;
-    registry.src = ./..;  # Auto-inject registry into all files
+    registry.src = ../registry;  # Auto-inject registry into all files
   };
-
-  flake.nixosModules.default = imp registry.modules.nixos;
 }
 ```
 
-Use registry in output files:
+Use registry in output files with `imp.imports`:
 
 ```nix
 # nix/outputs/nixosConfigurations/server.nix
-{ inputs, lib, imp, registry, ... }:
+{ lib, inputs, imp, registry, ... }:
 lib.nixosSystem {
   system = "x86_64-linux";
-  modules = [
-    (imp registry.hosts.server)
-    (imp registry.modules.nixos)
+  specialArgs = { inherit inputs imp registry; };
+  modules = imp.imports [
+    registry.hosts.server
+    registry.modules.nixos.base
+    registry.modules.nixos.features.hardening
+    registry.modules.nixos.features.webserver
   ];
 }
+```
+
+`imp.imports` handles mixed content - paths are imported, modules pass through:
+
+```nix
+modules = imp.imports [
+  registry.hosts.server                         # path -> imported
+  registry.modules.nixos.base                   # path -> imported
+  inputs.some-flake.nixosModules.something      # module -> passed through
+  { services.openssh.enable = true; }           # inline config -> passed through
+];
 ```
 
 Directories without `default.nix` include a `__path` attribute for the directory itself, plus entries for children. This lets you use `imp registry.modules.nixos` to import the whole directory, or `registry.modules.nixos.base` for a specific file.
@@ -396,19 +405,28 @@ Declare `__inputs` inline where they're used. The flake-parts module collects th
 }
 ```
 
+For inputs used across multiple files, add them to `coreInputs` instead:
+
 ```nix
-# nix/outputs/homeConfigurations/alice@workstation.nix
+# nix/flake/inputs.nix
 {
-  __inputs.home-manager = {
+  nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+  home-manager = {
     url = "github:nix-community/home-manager";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+}
+```
 
-  __functor = _: { inputs, nixpkgs, imp, registry, ... }:
-    inputs.home-manager.lib.homeManagerConfiguration {
-      pkgs = nixpkgs.legacyPackages.x86_64-linux;
-      modules = [ (imp registry.home.alice) ];
-    };
+Then output files can be simple functions:
+
+```nix
+# nix/outputs/homeConfigurations/alice@workstation.nix
+{ inputs, nixpkgs, imp, registry, ... }:
+inputs.home-manager.lib.homeManagerConfiguration {
+  pkgs = nixpkgs.legacyPackages.x86_64-linux;
+  extraSpecialArgs = { inherit inputs imp registry; };
+  modules = [ (import registry.users.alice) ];
 }
 ```
 

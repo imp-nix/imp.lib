@@ -261,6 +261,41 @@ in
   new = callable;
 
   /*
+    .imports <list of items>
+    Build a modules list from mixed items.
+
+    Handles:
+    - Paths: imported automatically
+    - Registry nodes (with __path): path extracted and imported
+    - Everything else (attrsets, functions, etc.): passed through as-is
+
+    This allows a single unified modules list:
+
+      modules = imp.imports [
+        registry.hosts.server                        # path -> imported
+        registry.modules.nixos.base                  # path -> imported
+        registry.modules.nixos.features.hardening    # path -> imported
+        inputs.home-manager.nixosModules.home-manager # module -> passed through
+        { services.openssh.enable = true; }          # attrset -> passed through
+      ];
+  */
+  imports =
+    items:
+    let
+      registryLib = import ./registry.nix { lib = updated.lib or builtins; };
+      isPath = p: builtins.isPath p || (builtins.isString p && builtins.substring 0 1 p == "/");
+      process =
+        item:
+        if registryLib.isRegistryNode item then
+          import item.__path
+        else if isPath item then
+          import item
+        else
+          item;
+    in
+    map process items;
+
+  /*
     .analyze
     Namespace for dependency analysis and visualization functions.
 
