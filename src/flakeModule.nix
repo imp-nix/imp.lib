@@ -1,7 +1,22 @@
-# Flake-parts module for imp.
-#
-# Automatically loads flake outputs from a directory structure.
-# See option descriptions below for usage details.
+/*
+  Flake-parts module for imp.
+
+  Automatically loads flake outputs from a directory structure.
+  Directory structure maps directly to flake-parts options:
+
+    outputs/
+      perSystem/           -> perSystem options (receives pkgs, system, etc.)
+        packages.nix       -> perSystem.packages
+        apps.nix           -> perSystem.apps
+        devShells.nix      -> perSystem.devShells
+      nixosConfigurations/ -> flake.nixosConfigurations
+      overlays.nix         -> flake.overlays
+      systems.nix          -> systems (list of supported systems)
+
+  Files receive standardized arguments matching flake-parts conventions:
+    - perSystem files: { pkgs, lib, system, self, self', inputs, inputs', config, ... }
+    - flake files: { lib, self, inputs, config, ... }
+*/
 {
   lib,
   flake-parts-lib,
@@ -36,6 +51,9 @@ let
       in
       lib.recursiveUpdate autoRegistry cfg.registry.modules;
 
+  # Bound imp instance with lib for passing to modules
+  imp = impLib.withLib lib;
+
   # Build tree from a directory, calling each file with args.
   # Handles both functions and attrsets with __functor.
   buildTree =
@@ -45,23 +63,49 @@ let
     else
       { };
 
-  isPerSystemDir = name: name == cfg.perSystemDir;
+  # Reserved directory/file names that have special handling
+  isSpecialEntry = name: name == cfg.perSystemDir || name == "systems";
 
-  # Get flake-level outputs (everything except perSystem dir)
+  # Use nixpkgs lib when available (has nixosSystem, etc.), fallback to flake-parts lib
+  # This ensures lib.nixosSystem works in output files
+  nixpkgsLib = inputs.nixpkgs.lib or lib;
+
+  # Standard flake-level args (mirrors flake-parts module args)
+  flakeArgs = {
+    lib = nixpkgsLib;
+    inherit
+      self
+      inputs
+      config
+      imp
+      ;
+    # Allow access to top-level options for introspection
+    inherit (config) systems;
+    ${cfg.registry.name} = registry;
+  }
+  // cfg.args;
+
+  # Get flake-level outputs (everything except special entries)
   flakeTree =
     if cfg.src == null then
       { }
     else
       let
-        fullTree = buildTree cfg.src (
-          {
-            inherit lib self inputs;
-            ${cfg.registry.name} = registry;
-          }
-          // cfg.args
-        );
+        fullTree = buildTree cfg.src flakeArgs;
       in
-      filterAttrs (name: _: !isPerSystemDir name) fullTree;
+      filterAttrs (name: _: !isSpecialEntry name) fullTree;
+
+  # Check for systems.nix in src directory
+  systemsFile = cfg.src + "/systems.nix";
+  hasSystemsFile = cfg.src != null && builtins.pathExists systemsFile;
+  systemsFromFile =
+    if hasSystemsFile then
+      let
+        imported = import systemsFile;
+      in
+      if builtins.isFunction imported then imported flakeArgs else imported
+    else
+      null;
 
   # Flake file generation
   flakeFileCfg = cfg.flakeFile;
@@ -90,14 +134,14 @@ in
         description = ''
           Directory containing flake outputs to import.
 
-          Example structure:
+          Structure maps to flake-parts semantics:
             outputs/
-              perSystem/
-                packages.nix     -> perSystem.packages
-                devShells.nix    -> perSystem.devShells
-              nixosConfigurations/
-                server.nix       -> flake.nixosConfigurations.server
-              overlays.nix       -> flake.overlays
+              perSystem/           -> perSystem.* (per-system outputs)
+                packages.nix       -> perSystem.packages
+                devShells.nix      -> perSystem.devShells
+              nixosConfigurations/ -> flake.nixosConfigurations
+              overlays.nix         -> flake.overlays
+              systems.nix          -> systems (optional, overrides top-level)
         '';
       };
 
@@ -107,18 +151,22 @@ in
         description = ''
           Extra arguments passed to all imported files.
 
-          Files receive: { lib, self, inputs, ... } // args (for flake outputs)
-          Or: { pkgs, lib, system, self, self', inputs, inputs', ... } // args (for perSystem)
+          Flake files receive: { lib, self, inputs, config, imp, registry, ... }
+          perSystem files receive: { pkgs, lib, system, self, self', inputs, inputs', imp, registry, ... }
 
-          User-provided args take precedence, allowing you to override lib
-          with a custom extended version.
+          User-provided args take precedence over defaults.
         '';
       };
 
       perSystemDir = mkOption {
         type = types.str;
         default = "perSystem";
-        description = "Subdirectory name for per-system outputs.";
+        description = ''
+          Subdirectory name for per-system outputs.
+
+          Files in this directory receive standard flake-parts perSystem args:
+          { pkgs, lib, system, self, self', inputs, inputs', ... }
+        '';
       };
 
       registry = {
@@ -129,13 +177,12 @@ in
             Attribute name used to inject the registry into file arguments.
 
             Change this if "registry" conflicts with other inputs or arguments.
-
-            Example:
-              registry.name = "impRegistry";
-              
-            Then in files:
-              { impRegistry, ... }:
-              { imports = [ impRegistry.modules.home ]; }
+          '';
+          example = lib.literalExpression ''
+            "impRegistry"
+            # Then in files:
+            # { impRegistry, ... }:
+            # { imports = [ impRegistry.modules.home ]; }
           '';
         };
 
@@ -145,16 +192,19 @@ in
           description = ''
             Root directory to scan for building the module registry.
 
-            The registry maps directory structure to named modules:
-              nix/
-                home/alice/     -> registry.home.alice
-                modules/nixos/  -> registry.modules.nixos
-
-            Files can then reference modules by name instead of path:
-              { registry, ... }:
-              {
-                imports = [ registry.modules.home ];
-              }
+            The registry maps directory structure to named modules.
+            Files can then reference modules by name instead of path.
+          '';
+          example = lib.literalExpression ''
+            ./nix
+            # Structure:
+            #   nix/
+            #     users/alice/     -> registry.users.alice
+            #     modules/nixos/   -> registry.modules.nixos
+            #
+            # Usage in files:
+            #   { registry, ... }:
+            #   { imports = [ registry.modules.home ]; }
           '';
         };
 
@@ -164,11 +214,11 @@ in
           description = ''
             Explicit module name -> path mappings.
             These override auto-discovered modules from registry.src.
-
-            Example:
-              registry.modules = {
-                specialModule = ./path/to/special.nix;
-              };
+          '';
+          example = lib.literalExpression ''
+            {
+              specialModule = ./path/to/special.nix;
+            }
           '';
         };
 
@@ -177,11 +227,10 @@ in
           default = [ ];
           description = ''
             Directories to scan for registry references when detecting renames.
-
             If empty, defaults to [ imp.src ] when registry.src is set.
-
-            Example:
-              registry.migratePaths = [ ./nix/outputs ./nix/flake ];
+          '';
+          example = lib.literalExpression ''
+            [ ./nix/outputs ./nix/flake ]
           '';
         };
       };
@@ -206,19 +255,19 @@ in
           default = { };
           description = ''
             Core inputs always included in flake.nix (e.g., nixpkgs, flake-parts).
-
-            Example:
-              coreInputs = {
-                nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-                flake-parts.url = "github:hercules-ci/flake-parts";
-              };
+          '';
+          example = lib.literalExpression ''
+            {
+              nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+              flake-parts.url = "github:hercules-ci/flake-parts";
+            }
           '';
         };
 
         outputsFile = mkOption {
           type = types.str;
           default = "./outputs.nix";
-          description = "Path to outputs.nix (relative to flake.nix).";
+          description = "Path to outputs file (relative to flake.nix).";
         };
 
         header = mkOption {
@@ -244,6 +293,11 @@ in
   };
 
   config = lib.mkMerge [
+    # Systems from file (if present)
+    (lib.mkIf (systemsFromFile != null) {
+      systems = lib.mkDefault systemsFromFile;
+    })
+
     # Main imp config
     (lib.mkIf (cfg.src != null) {
       flake = flakeTree;
@@ -268,6 +322,7 @@ in
               self'
               inputs
               inputs'
+              imp
               ;
             ${cfg.registry.name} = registry;
           }
@@ -282,24 +337,26 @@ in
       perSystem =
         { pkgs, ... }:
         {
-          # Regenerate flake.nix from __inputs declarations.
-          #
-          # Files can declare inputs inline:
-          #
-          #   # With __functor (when file needs args like pkgs, inputs):
-          #   {
-          #     __inputs.treefmt-nix.url = "github:numtide/treefmt-nix";
-          #     __functor = _: { pkgs, inputs, ... }:
-          #       inputs.treefmt-nix.lib.evalModule pkgs { ... };
-          #   }
-          #
-          #   # Without __functor (static data that declares inputs):
-          #   {
-          #     __inputs.foo.url = "github:owner/foo";
-          #     someKey = "value";
-          #   }
-          #
-          # Run: nix run .#imp-flake
+          /*
+            Regenerate flake.nix from __inputs declarations.
+
+            Files can declare inputs inline:
+
+              # With __functor (when file needs args like pkgs, inputs):
+              {
+                __inputs.treefmt-nix.url = "github:numtide/treefmt-nix";
+                __functor = _: { pkgs, inputs, ... }:
+                  inputs.treefmt-nix.lib.evalModule pkgs { ... };
+              }
+
+              # Without __functor (static data that declares inputs):
+              {
+                __inputs.foo.url = "github:owner/foo";
+                someKey = "value";
+              }
+
+            Run: nix run .#imp-flake
+          */
           apps.imp-flake = {
             type = "app";
             program = toString (
@@ -311,8 +368,6 @@ in
             meta.description = "Regenerate flake.nix from __inputs declarations";
           };
 
-          # Checks that flake.nix matches what would be generated.
-          # Fails if flake.nix is out of sync with __inputs declarations.
           checks.flake-up-to-date =
             pkgs.runCommand "flake-up-to-date"
               {
@@ -362,27 +417,30 @@ in
           graph = analyzeLib.analyzeRegistry { inherit registry; };
         in
         {
-          # Detect registry renames and generate fix commands.
-          #
-          # When directories are renamed, registry paths change. This app:
-          # 1. Scans files for registry.X.Y patterns
-          # 2. Compares against current registry to find broken references
-          # 3. Suggests mappings from old names to new names
-          # 4. Uses ast-grep for AST-aware replacements
-          #
-          # Run: nix run .#imp-registry
+          /*
+            Detect registry renames and generate fix commands.
+
+             When directories are renamed, registry paths change. This app:
+             1. Scans files for registry.X.Y patterns
+             2. Compares against current registry to find broken references
+             3. Suggests mappings from old names to new names
+             4. Uses ast-grep for AST-aware replacements
+
+             Run: nix run .#imp-registry
+          */
           apps.imp-registry = {
             type = "app";
             program = toString (pkgs.writeShellScript "imp-registry" migration.script);
             meta.description = "Detect and fix registry path renames";
           };
+          /*
+            Visualize registry dependencies as a graph.
 
-          # Visualize registry dependencies as a graph.
-          #
-          # Analyzes the registry and outputs a dependency graph showing
-          # how modules reference each other via registry paths.
-          #
-          # Run: nix run .#imp-vis [--format=dot|ascii|json]
+            Analyzes the registry and outputs a dependency graph showing
+            how modules reference each other via registry paths.
+
+            Run: nix run .#imp-vis [--format=dot|ascii|json]
+          */
           apps.imp-vis = {
             type = "app";
             program = toString (visualizeLib.mkVisualizeScript { inherit pkgs graph; });
