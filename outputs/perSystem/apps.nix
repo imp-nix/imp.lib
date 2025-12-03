@@ -58,15 +58,13 @@ in
     meta.description = "Serve the Imp documentation locally with live reload";
     program = toString (
       pkgs.writeShellScript "serve-docs" ''
-        tmpdir=$(mktemp -d)
-        cleanup() {
-          kill $pid 2>/dev/null
-          rm -rf "$tmpdir"
-        }
+        cleanup() { kill $pid 2>/dev/null; }
         trap cleanup EXIT INT TERM
-        cp -r ${siteDir}/* "$tmpdir/"
-        chmod -R u+w "$tmpdir"
-        ${pkgs.mdbook}/bin/mdbook serve "$tmpdir" &
+        if [ ! -d "./site" ]; then
+          echo "Error: ./site directory not found. Run from the imp flake root."
+          exit 1
+        fi
+        ${pkgs.mdbook}/bin/mdbook serve ./site &
         pid=$!
         sleep 1
         ${opener} http://localhost:3000
