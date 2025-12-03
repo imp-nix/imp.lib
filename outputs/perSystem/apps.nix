@@ -9,6 +9,8 @@
 }:
 let
   visualizeLib = import ../../src/visualize.nix { inherit lib; };
+  siteDir = ../../site;
+  opener = if pkgs.stdenv.isDarwin then "open" else "xdg-open";
 in
 {
   tests = {
@@ -48,6 +50,31 @@ in
         nixpkgsFlake = nixpkgs;
         name = "imp-vis";
       }
+    );
+  };
+
+  docs = {
+    type = "app";
+    meta.description = "Serve the Imp documentation locally with live reload";
+    program = toString (
+      pkgs.writeShellScript "serve-docs" ''
+        ${pkgs.mdbook}/bin/mdbook serve ${siteDir} &
+        pid=$!
+        sleep 1
+        ${opener} http://localhost:3000
+        wait $pid
+      ''
+    );
+  };
+
+  build-docs = {
+    type = "app";
+    meta.description = "Build the Imp documentation";
+    program = toString (
+      pkgs.writeShellScript "build-docs" ''
+        ${pkgs.mdbook}/bin/mdbook build ${siteDir} --dest-dir "$(pwd)/docs"
+        echo "Documentation built to ./docs"
+      ''
     );
   };
 }

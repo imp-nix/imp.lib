@@ -1,0 +1,16 @@
+[book]
+authors = ["Albert O'Shea"]
+language = "en"
+src = "src"
+title = "Imp"
+
+[build]
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/Alb-O/imp"
+edit-url-template = "https://github.com/Alb-O/imp/edit/main/site/{path}"
+no-section-label = true
+
+[output.html.print]
+enable = false
