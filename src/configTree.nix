@@ -59,6 +59,7 @@ let
       buildFromDir =
         dir:
         let
+          isRoot = dir == root;
           entries = builtins.readDir dir;
 
           toAttrName =
@@ -68,7 +69,12 @@ let
             in
             lib.removeSuffix "_" withoutNix;
 
-          shouldInclude = name: !(lib.hasPrefix "_" name) && filterf (toString dir + "/" + name);
+          # Skip default.nix at root level - it's the entry point, not a config file
+          shouldInclude =
+            name:
+            !(lib.hasPrefix "_" name)
+            && !(isRoot && name == "default.nix")
+            && filterf (toString dir + "/" + name);
 
           processEntry =
             name: type:

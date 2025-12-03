@@ -228,4 +228,28 @@ in
       };
     };
   };
+
+  # Test that default.nix at root is skipped (to allow wrapper pattern)
+  configTree."test skips default.nix at root level" = {
+    expr =
+      let
+        module = lit.configTree ./fixtures/config-tree-with-default;
+        mockArgs = {
+          config = { };
+          lib = lib;
+          pkgs = { };
+          imp = lit;
+        };
+        result = module mockArgs;
+      in
+      result.config;
+    expected = {
+      programs = {
+        git = {
+          enable = true;
+          userName = "Test";
+        };
+      };
+    };
+  };
 }
