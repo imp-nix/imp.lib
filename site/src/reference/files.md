@@ -21,6 +21,7 @@ Internal utilities used by other modules.
 ### `src/collect.nix`
 
 File collection and filtering logic. Handles:
+
 - Recursive directory traversal
 - `.nix` file detection
 - Hidden file (`_` prefix) exclusion

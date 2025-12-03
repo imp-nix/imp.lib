@@ -183,12 +183,14 @@ imp.configTree {
 ## When to Use
 
 **Use config trees when:**
+
 - You have many programs/services to configure
 - You want one file per program
 - Configuration is mostly declarative values
 - You want directory structure to reflect option structure
 
 **Use regular modules when:**
+
 - You need complex logic or conditionals
 - Options affect multiple unrelated paths
 - You're writing reusable library modules

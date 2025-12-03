@@ -159,6 +159,7 @@ For more complex composition, use `mergeConfigTrees`:
 ```
 
 With `"merge"` strategy:
+
 - Lists are concatenated
 - `shellAliases` from all sources are combined
 - Use `lib.mkBefore`/`lib.mkAfter` to control order
@@ -189,9 +190,9 @@ home-manager switch --flake .#alice@workstation
 ## Tips
 
 1. **Use config trees for programs** - Each program gets its own file
-2. **Create feature modules** - Reusable across users
-3. **Override in user config** - User-specific customization
-4. **Use merge strategy** - When you want additive composition
+1. **Create feature modules** - Reusable across users
+1. **Override in user config** - User-specific customization
+1. **Use merge strategy** - When you want additive composition
 
 ## See Also
 

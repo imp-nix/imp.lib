@@ -41,8 +41,8 @@ Declare inputs where they're used with `__inputs`:
 ## How It Works
 
 1. Imp scans your outputs directory for `__inputs` declarations
-2. Collects all inputs into a merged set
-3. Generates or updates `flake.nix` with the collected inputs
+1. Collects all inputs into a merged set
+1. Generates or updates `flake.nix` with the collected inputs
 
 ## Setup
 
@@ -109,11 +109,13 @@ Files with `__inputs` must use `__functor` pattern:
 ## Core vs Inline Inputs
 
 **Core inputs** (`coreInputs`):
+
 - Always in `flake.nix`
 - Used across multiple files
 - Examples: `nixpkgs`, `flake-parts`, `home-manager`
 
 **Inline inputs** (`__inputs`):
+
 - Declared where used
 - Collected into `flake.nix` automatically
 - Examples: `treefmt-nix`, `nix-unit`
@@ -155,11 +157,13 @@ Fix by moving shared inputs to `coreInputs`.
 ## When to Use
 
 **Use inline `__inputs` for:**
+
 - Single-use inputs
 - Optional features
 - Keeping related code together
 
 **Use `coreInputs` for:**
+
 - Widely used inputs (`nixpkgs`, `home-manager`)
 - Inputs that need `follows` from other cores
 - Foundational dependencies

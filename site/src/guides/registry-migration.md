@@ -47,9 +47,9 @@ Run with --apply to execute these commands.
 ## How It Works
 
 1. **Scans files** for `registry.X.Y` patterns
-2. **Compares** against current registry to find broken references
-3. **Matches** old paths to new paths by leaf name (e.g., `home.alice` → `users.alice`)
-4. **Uses ast-grep** for AST-aware replacements (handles multi-line expressions)
+1. **Compares** against current registry to find broken references
+1. **Matches** old paths to new paths by leaf name (e.g., `home.alice` → `users.alice`)
+1. **Uses ast-grep** for AST-aware replacements (handles multi-line expressions)
 
 ## Configuration
 
@@ -113,9 +113,9 @@ rg 'registry\.old\.path' ./outputs
 ## Best Practices
 
 1. **Commit before renaming** - Easy rollback if needed
-2. **Run migration immediately** after rename
-3. **Review changes** before committing
-4. **Use --apply carefully** - Review output first
+1. **Run migration immediately** after rename
+1. **Review changes** before committing
+1. **Use --apply carefully** - Review output first
 
 ## See Also
 

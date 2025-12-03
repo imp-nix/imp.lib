@@ -133,9 +133,10 @@ imports = [ (inputs.imp ./modules) ];
 ```
 
 Imp:
+
 1. Recursively finds all `.nix` files in `./modules`
-2. Skips files starting with `_`
-3. Returns a module that imports all found files
+1. Skips files starting with `_`
+1. Returns a module that imports all found files
 
 Equivalent to:
 

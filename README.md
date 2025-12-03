@@ -354,10 +354,11 @@ Run with --apply to execute these commands.
 ```
 
 The tool:
+
 1. Scans files for `registry.X.Y` patterns
-2. Compares against current registry to find broken references
-3. Matches old paths to new paths by leaf name (e.g., `home.alice` → `users.alice`)
-4. Uses [ast-grep](https://ast-grep.github.io/) for AST-aware replacements (handles multi-line expressions correctly)
+1. Compares against current registry to find broken references
+1. Matches old paths to new paths by leaf name (e.g., `home.alice` → `users.alice`)
+1. Uses [ast-grep](https://ast-grep.github.io/) for AST-aware replacements (handles multi-line expressions correctly)
 
 ### Registry Visualization
 

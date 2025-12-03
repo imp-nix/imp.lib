@@ -76,6 +76,7 @@ imp.treeWith lib import ./outputs
 ### In `perSystem/` directory
 
 Files receive:
+
 - `pkgs` - nixpkgs for the current system
 - `lib` - nixpkgs lib
 - `system` - current system (e.g., "x86_64-linux")
@@ -88,6 +89,7 @@ Files receive:
 ### Outside `perSystem/`
 
 Files receive:
+
 - `lib` - nixpkgs lib
 - `self` - the flake
 - `inputs` - flake inputs

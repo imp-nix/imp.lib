@@ -4,12 +4,12 @@ Imp uses file and directory names to determine attribute names in the resulting 
 
 ## Basic Rules
 
-| Path | Attribute | Notes |
-|------|-----------|-------|
-| `foo.nix` | `foo` | File becomes attribute |
-| `foo/default.nix` | `foo` | Directory with default.nix |
-| `foo_.nix` | `foo` | Trailing `_` escapes reserved names |
-| `_foo.nix` | *(ignored)* | Leading `_` = hidden |
+| Path              | Attribute   | Notes                               |
+| ----------------- | ----------- | ----------------------------------- |
+| `foo.nix`         | `foo`       | File becomes attribute              |
+| `foo/default.nix` | `foo`       | Directory with default.nix          |
+| `foo_.nix`        | `foo`       | Trailing `_` escapes reserved names |
+| `_foo.nix`        | *(ignored)* | Leading `_` = hidden                |
 
 ## File Extension Stripping
 
@@ -45,6 +45,7 @@ modules/
 ```
 
 This is useful for:
+
 - Helper functions imported by other modules
 - Work-in-progress files
 - Templates
@@ -61,6 +62,7 @@ outputs/
 ```
 
 Common cases:
+
 - `default_.nix` - Prevent treating as directory module
 - `import_.nix` - Nix keyword
 - `let_.nix` - Nix keyword
@@ -85,6 +87,7 @@ registry.modules.nixos.base     # Path to base.nix
 ```
 
 This lets you:
+
 - Import specific files: `import registry.modules.nixos.base`
 - Import entire directory: `inputs.imp registry.modules.nixos.__path`
 

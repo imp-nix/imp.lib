@@ -5,6 +5,7 @@ The registry provides named access to modules, replacing relative path imports w
 ## Why Use a Registry?
 
 Without registry:
+
 ```nix
 imports = [
   ../../../hosts/server/default.nix
@@ -14,6 +15,7 @@ imports = [
 ```
 
 With registry:
+
 ```nix
 modules = imp.imports [
   registry.hosts.server
@@ -23,6 +25,7 @@ modules = imp.imports [
 ```
 
 Benefits:
+
 - **Refactor-friendly** - Move files without updating every import
 - **Self-documenting** - Names describe what modules do
 - **Autocomplete** - IDEs can complete registry paths

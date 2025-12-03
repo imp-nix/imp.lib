@@ -88,6 +88,7 @@ nixosConfigurations.server
 ## Customization
 
 The HTML output uses D3.js for rendering. You can modify the generated file to:
+
 - Change colors
 - Adjust layout parameters
 - Add custom styling

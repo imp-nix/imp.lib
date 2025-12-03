@@ -65,6 +65,7 @@ imp.mergeConfigTrees { strategy = "merge"; } [
 ```
 
 With `"merge"` strategy:
+
 - Lists are concatenated
 - Attrs are merged deeply
 - Use `lib.mkBefore`/`lib.mkAfter` to control order
@@ -167,11 +168,13 @@ registry/modules/home/
 ## When to Use Each Strategy
 
 **Use `"override"` when:**
+
 - Creating variants that replace base config
 - You want simpler mental model
 - Order doesn't matter
 
 **Use `"merge"` when:**
+
 - Building additive layers
 - Values should accumulate (lists, sets)
 - You need fine-grained ordering control

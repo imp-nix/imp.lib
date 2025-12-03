@@ -58,7 +58,11 @@ in
     meta.description = "Serve the Imp documentation locally with live reload";
     program = toString (
       pkgs.writeShellScript "serve-docs" ''
-        ${pkgs.mdbook}/bin/mdbook serve ${siteDir} &
+        tmpdir=$(mktemp -d)
+        trap "rm -rf $tmpdir" EXIT
+        cp -r ${siteDir}/* "$tmpdir/"
+        chmod -R u+w "$tmpdir"
+        ${pkgs.mdbook}/bin/mdbook serve "$tmpdir" &
         pid=$!
         sleep 1
         ${opener} http://localhost:3000
