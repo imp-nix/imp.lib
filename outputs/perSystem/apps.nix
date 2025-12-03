@@ -5,14 +5,13 @@
   nixpkgs,
   nixdoc,
   self,
-  inputs,
   lib,
   ...
 }:
 let
   visualizeLib = import ../../src/visualize.nix { inherit lib; };
 
-  # Use forked nixdoc with let-in identifier resolution
+  # Use forked nixdoc with let-in identifier resolution and options rendering
   nixdocBin = nixdoc.packages.${pkgs.system}.default;
 
   # mdformat with plugins (same as formatter.nix)
@@ -24,109 +23,41 @@ let
     ]
   );
 
-  # Render options from flakeModule (same as packages.nix)
-  renderOptionsLib = import ../../src/render-options.nix { inherit lib; };
-  flake-parts-lib = {
-    mkPerSystemOption = f: f { };
+  # Use shared options schema for documentation generation
+  optionsSchema = import ../../src/options-schema.nix { inherit lib; };
+
+  # Evaluate module to get properly structured options
+  evaluatedModule = lib.evalModules {
+    modules = [ optionsSchema ];
   };
-  flakeModuleOptions =
-    (import ../../src/flakeModule.nix {
-      inherit
-        lib
-        flake-parts-lib
-        inputs
-        self
-        ;
-      config = {
-        imp = {
-          src = null;
-          args = { };
-          perSystemDir = "perSystem";
-          registry = {
-            name = "registry";
-            src = null;
-            modules = { };
-            migratePaths = [ ];
-          };
-          flakeFile = {
-            enable = false;
-            path = self + "/flake.nix";
-            description = "";
-            coreInputs = { };
-            outputsFile = "./outputs.nix";
-            header = "";
-          };
-        };
-        systems = [ ];
-      };
-    }).options;
-  optionsMarkdown = renderOptionsLib.render flakeModuleOptions;
 
-  # Standalone utilities section (same as in packages.nix)
-  standaloneSection = ''
+  # Extract options to JSON
+  rawOpts = lib.optionAttrSetToDocList evaluatedModule.options;
+  filteredOpts = lib.filter (
+    opt: (opt.visible or true) && !(opt.internal or false) && lib.hasPrefix "imp." opt.name
+  ) rawOpts;
+  optionsNix = builtins.listToAttrs (
+    map (o: {
+      name = o.name;
+      value = removeAttrs o [
+        "name"
+        "visible"
+        "internal"
+      ];
+    }) filteredOpts
+  );
+  optionsJson = builtins.toJSON optionsNix;
 
-    ## Standalone Utilities
+  # Write options JSON to a file for the shell scripts
+  optionsJsonFile = pkgs.writeText "imp-options.json" optionsJson;
 
-    These functions work without calling `.withLib` first.
-
-    ### `imp.registry` {#imp.registry}
-
-    Build a registry from a directory structure. Requires `.withLib`.
-
-    #### Example
-
-    ```nix
-    registry = (imp.withLib lib).registry ./nix
-    # => { hosts.server = <path>; modules.nixos.base = <path>; ... }
-    ```
-
-    ### `imp.collectInputs` {#imp.collectInputs}
-
-    Scan directories for `__inputs` declarations and collect them.
-
-    #### Example
-
-    ```nix
-    imp.collectInputs ./outputs
-    # => { treefmt-nix = { url = "github:numtide/treefmt-nix"; }; }
-    ```
-
-    ### `imp.formatFlake` {#imp.formatFlake}
-
-    Format collected inputs as a flake.nix string.
-
-    #### Example
-
-    ```nix
-    imp.formatFlake {
-      description = "My flake";
-      coreInputs = { nixpkgs.url = "github:nixos/nixpkgs"; };
-      collectedInputs = imp.collectInputs ./outputs;
-    }
-    ```
-
-    ### `imp.collectAndFormatFlake` {#imp.collectAndFormatFlake}
-
-    Convenience function combining collectInputs and formatFlake.
-
-    #### Example
-
-    ```nix
-    imp.collectAndFormatFlake {
-      src = ./outputs;
-      coreInputs = { nixpkgs.url = "github:nixos/nixpkgs"; };
-      description = "My flake";
-    }
-    ```
-  '';
-
-  # Script to generate API reference (matches packages.nix)
+  # Script to generate API reference (uses nixdoc for both methods and options)
   generateApiRef = pkgs.writeShellScript "generate-api-ref" ''
     set -e
     SITE_DIR="$1"
     SRC_DIR="$2"
     README_FILE="$3"
-    OPTIONS_MD="$4"
+    OPTIONS_JSON="$4"
 
     # Copy README.md to site/src for Introduction page
     cp "$README_FILE" "$SITE_DIR/src/README.md"
@@ -183,13 +114,16 @@ let
         --prefix "imp" \
         --anchor-prefix ""
 
-      cat <<'STANDALONE'
-    ${standaloneSection}
-    STANDALONE
+      # Append standalone section from shared file
+      cat "$SITE_DIR/src/reference/standalone.md"
     } > "$SITE_DIR/src/reference/methods.md"
 
-    # Copy pre-generated options
-    echo "$OPTIONS_MD" > "$SITE_DIR/src/reference/options.md"
+    # Generate options using nixdoc options command
+    ${lib.getExe' nixdocBin "nixdoc"} options \
+      --file "$OPTIONS_JSON" \
+      --title "Module Options" \
+      --anchor-prefix "opt-" \
+      > "$SITE_DIR/src/reference/options.md"
 
     # Format the generated markdown
     ${lib.getExe mdformat} "$SITE_DIR/src/reference/methods.md"
@@ -245,7 +179,7 @@ in
         fi
 
         echo "Generating API reference from src/*.nix..."
-        ${generateApiRef} ./site ./src ./README.md ${lib.escapeShellArg optionsMarkdown}
+        ${generateApiRef} ./site ./src ./README.md ${optionsJsonFile}
 
         echo "Starting mdbook server..."
         ${pkgs.mdbook}/bin/mdbook serve ./site &
@@ -268,7 +202,7 @@ in
         fi
 
         echo "Generating API reference from src/*.nix..."
-        ${generateApiRef} ./site ./src ./README.md ${lib.escapeShellArg optionsMarkdown}
+        ${generateApiRef} ./site ./src ./README.md ${optionsJsonFile}
 
         ${pkgs.mdbook}/bin/mdbook build ./site --dest-dir "$(pwd)/docs"
         echo "Documentation built to ./docs"

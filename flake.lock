@@ -124,15 +124,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1764800575,
-        "narHash": "sha256-/6waSJAGB0ARnCsaGbS6oTgR8hHkUTLQwNHYRMOn0Ls=",
+        "lastModified": 1764804803,
+        "narHash": "sha256-8tnsbXYn6yoVN8ZI6Sy0gGMUesJI5PRIF5Ku3JMTE4A=",
         "owner": "Alb-O",
         "repo": "nixdoc",
-        "rev": "7e66a42bd320c85a2b82d42a8865cf7bf76bd710",
+        "rev": "bbff2e2b76c1bedc5cbda1b120d8496ebac870e4",
         "type": "github"
       },
       "original": {
         "owner": "Alb-O",
+        "ref": "feat/render-options",
         "repo": "nixdoc",
         "type": "github"
       }
