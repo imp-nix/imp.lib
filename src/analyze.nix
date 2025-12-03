@@ -19,12 +19,6 @@
   Usage:
     # Analyze a registry to find all relationships
     imp.analyze.registry registry
-
-    # Format as DOT
-    imp.analyze.toDot graph
-
-    # Format as JSON-compatible attrset
-    imp.analyze.toJson graph
 */
 { lib }:
 let
@@ -100,6 +94,7 @@ let
         name: type: type == "regular" && lib.hasSuffix ".nix" name && !(lib.hasPrefix "_" name)
       ) entries;
 
+      # Analyze each file and create a node + edges for it
       analyzeFile =
         name:
         let
@@ -110,33 +105,32 @@ let
           refs = lib.filter (m: builtins.isList m) matches;
           refStrings = map (m: builtins.elemAt m 0) refs;
           uniqueRefs = lib.unique refStrings;
+          # File id: for default.nix use parent id, otherwise parent.filename
+          fileId = if name == "default.nix" then id else "${id}.${lib.removeSuffix ".nix" name}";
         in
         {
-          path = filePath;
-          registryRefs = uniqueRefs;
+          node = {
+            id = fileId;
+            inherit path;
+            filePath = filePath;
+            type = "file";
+            parent = id;
+          };
+          edges = map (ref: {
+            from = lib.removePrefix "registry." ref;
+            to = fileId;
+            type = "registry";
+          }) uniqueRefs;
         };
 
       analyzedFiles = lib.mapAttrsToList (name: _: analyzeFile name) directFiles;
 
-      # Collect all unique registry references from direct files only
-      allRefs = lib.unique (lib.concatMap (f: f.registryRefs) analyzedFiles);
-
-      # Convert refs to edges
-      edges = map (ref: {
-        from = id;
-        to = lib.removePrefix "registry." ref;
-        type = "registry";
-      }) allRefs;
+      allNodes = map (f: f.node) analyzedFiles;
+      allEdges = lib.concatMap (f: f.edges) analyzedFiles;
     in
     {
-      nodes = [
-        {
-          inherit id path;
-          type = "configTree";
-          files = map (f: f.path) analyzedFiles;
-        }
-      ];
-      inherit edges;
+      nodes = allNodes;
+      edges = allEdges;
     };
 
   /*
@@ -176,7 +170,8 @@ let
     Analyze an entire registry, discovering all modules and their relationships.
 
     This walks the registry structure, finds all configTrees, and analyzes
-    each one for cross-references.
+    each one for cross-references. Also generates hierarchical edges between
+    parent and child nodes (e.g., modules -> modules.home).
   */
   analyzeRegistry =
     { registry }:
@@ -229,7 +224,7 @@ let
         ) { } rawPaths
       );
 
-      # Analyze each path that's a directory (configTree candidate)
+      # Analyze each path that's a directory (configTree candidate) or file
       analyzeEntry =
         entry:
         let
@@ -240,6 +235,13 @@ let
             inherit (entry) path id;
           }
         else
+          let
+            content = builtins.readFile entry.path;
+            matches = builtins.split "(registry\\.[a-zA-Z0-9_.]+)" content;
+            refs = lib.filter (m: builtins.isList m) matches;
+            refStrings = map (m: builtins.elemAt m 0) refs;
+            uniqueRefs = lib.unique refStrings;
+          in
           {
             nodes = [
               {
@@ -247,297 +249,40 @@ let
                 type = "file";
               }
             ];
-            edges = [ ];
+            edges = map (ref: {
+              from = lib.removePrefix "registry." ref;
+              to = entry.id;
+              type = "registry";
+            }) uniqueRefs;
           };
 
       results = map analyzeEntry allPaths;
 
-      # Merge all results
-      allNodes = lib.concatMap (r: r.nodes) results;
+      # Merge all results and deduplicate nodes by id
+      rawNodes = lib.concatMap (r: r.nodes) results;
+      allNodes = lib.attrValues (lib.foldl' (acc: node: acc // { ${node.id} = node; }) { } rawNodes);
       allEdges = lib.concatMap (r: r.edges) results;
 
-      # Resolve edge targets: convert registry.X.Y to just X.Y and validate
+      # Build set of known node IDs for validation
+      knownIds = lib.listToAttrs (map (n: lib.nameValuePair n.id true) allNodes);
+
+      # Resolve edge sources: convert registry.X.Y to just X.Y and validate
       resolvedEdges = map (
         edge:
         let
-          targetId = lib.removePrefix "registry." edge.to;
+          sourceId = lib.removePrefix "registry." edge.from;
         in
-        edge // { to = targetId; }
+        edge // { from = sourceId; }
       ) allEdges;
 
-      # Filter edges to only those pointing to known nodes, and deduplicate
-      knownIds = lib.listToAttrs (map (n: lib.nameValuePair n.id true) allNodes);
+      # Filter registry edges to only those from known nodes, and deduplicate
       deduplicatedEdges = lib.unique resolvedEdges;
-      validEdges = lib.filter (e: knownIds ? ${e.to} || true) deduplicatedEdges;
+      validRegistryEdges = lib.filter (e: knownIds ? ${e.from}) deduplicatedEdges;
     in
     {
       nodes = allNodes;
-      edges = validEdges;
+      edges = validRegistryEdges;
     };
-
-  # Format graph as DOT (Graphviz) format.
-  toDot =
-    graph:
-    let
-      # Escape quotes in strings for DOT
-      escape = s: lib.replaceStrings [ "\"" "\n" ] [ "\\\"" "\\n" ] s;
-
-      # Node styling based on type
-      nodeStyle =
-        node:
-        let
-          baseLabel = escape node.id;
-          style =
-            if node.type == "mergedTree" then
-              ''shape=box,style=filled,fillcolor=lightblue,label="${baseLabel}\n[${node.strategy}]"''
-            else if node.type == "configTree" then
-              ''shape=box,style=filled,fillcolor=lightyellow,label="${baseLabel}"''
-            else
-              ''shape=ellipse,label="${baseLabel}"'';
-        in
-        ''"${escape node.id}" [${style}];'';
-
-      # Edge styling based on type
-      edgeStyle =
-        edge:
-        let
-          style =
-            if edge.type == "merge" then
-              ''style=bold,color=blue,label="${edge.strategy or ""}"''
-            else if edge.type == "registry" then
-              ''style=dashed,color=gray''
-            else
-              "";
-        in
-        ''"${escape edge.from}" -> "${escape edge.to}"''
-        + lib.optionalString (style != "") " [${style}]"
-        + ";";
-
-      nodeLines = map nodeStyle graph.nodes;
-      edgeLines = map edgeStyle graph.edges;
-    in
-    ''
-      digraph imp_registry {
-        rankdir=LR;
-        node [fontname="sans-serif"];
-        edge [fontname="sans-serif"];
-
-        ${lib.concatStringsSep "\n  " nodeLines}
-
-        ${lib.concatStringsSep "\n  " edgeLines}
-      }
-    '';
-
-  # Format graph as ASCII tree (simplified view).
-  toAsciiTree =
-    graph:
-    let
-      # Build adjacency list
-      adjacency = lib.foldl' (
-        acc: edge:
-        acc
-        // {
-          ${edge.from} = (acc.${edge.from} or [ ]) ++ [
-            {
-              to = edge.to;
-              type = edge.type;
-              strategy = edge.strategy or null;
-            }
-          ];
-        }
-      ) { } graph.edges;
-
-      # Find root nodes (nodes with no incoming edges)
-      hasIncoming = lib.listToAttrs (map (e: lib.nameValuePair e.to true) graph.edges);
-      roots = lib.filter (n: !(hasIncoming ? ${n.id})) graph.nodes;
-
-      # Render a node and its children
-      renderNode =
-        indent: visited: node:
-        let
-          prefix = lib.concatStrings (lib.genList (_: "  ") indent);
-          children = adjacency.${node.id} or [ ];
-          nodeType =
-            if node.type == "mergedTree" then
-              "[merged:${node.strategy}]"
-            else if node.type == "configTree" then
-              "[tree]"
-            else
-              "[file]";
-
-          childLines = lib.concatMapStrings (
-            child:
-            let
-              edgeType = if child.type == "merge" then "─(merge)─▶ " else "─────────▶ ";
-              childNode = lib.findFirst (n: n.id == child.to) null graph.nodes;
-            in
-            if childNode == null || lib.elem child.to visited then
-              "${prefix}├${edgeType}${child.to} (circular or external)\n"
-            else
-              "${prefix}├${edgeType}\n" + renderNode (indent + 1) (visited ++ [ node.id ]) childNode
-          ) children;
-        in
-        "${prefix}${node.id} ${nodeType}\n${childLines}";
-
-      rootLines = lib.concatMapStrings (renderNode 0 [ ]) roots;
-    in
-    if roots == [ ] then
-      "No root nodes found (circular dependencies or empty graph)\n"
-    else
-      "imp Registry Dependency Graph\n${
-        "=" + lib.concatStrings (lib.genList (_: "=") 30)
-      }\n\n${rootLines}";
-
-  # Convert graph to a JSON-serializable structure.
-  toJson = graph: {
-    nodes = map (n: n // { path = toString n.path; }) graph.nodes;
-    edges = graph.edges;
-  };
-
-  # Convert graph to JSON without paths (avoids store path issues with special chars).
-  toJsonMinimal = graph: {
-    nodes = map (
-      n: { inherit (n) id type; } // lib.optionalAttrs (n ? strategy) { inherit (n) strategy; }
-    ) graph.nodes;
-    edges = graph.edges;
-  };
-
-  /*
-    Build a shell script that outputs the graph in the requested format.
-
-    Can be called two ways:
-
-    1. With pre-computed graph (for flakeModule - fast, no runtime eval):
-       mkVisualizeScript { pkgs, graph }
-
-    2. With impSrc and nixpkgsFlake (standalone - runtime eval of arbitrary path):
-       mkVisualizeScript { pkgs, impSrc, nixpkgsFlake }
-
-    Arguments:
-      - pkgs: nixpkgs package set (for writeShellScript)
-      - graph: pre-analyzed graph (optional, for pre-computed mode)
-      - impSrc: path to imp source (optional, for standalone mode)
-      - nixpkgsFlake: nixpkgs flake reference string (optional, for standalone mode)
-      - name: script name (default: "imp-vis")
-
-    Returns: a derivation for the shell script
-  */
-  mkVisualizeScript =
-    {
-      pkgs,
-      graph ? null,
-      impSrc ? null,
-      nixpkgsFlake ? null,
-      name ? "imp-vis",
-    }:
-    let
-      isStandalone = graph == null;
-
-      # Pre-computed outputs for non-standalone mode
-      dotOutput = if isStandalone then "" else toDot graph;
-      asciiOutput = if isStandalone then "" else toAsciiTree graph;
-      jsonOutput = if isStandalone then "" else builtins.toJSON (toJsonMinimal graph);
-
-      helpText = ''
-        echo "Usage: ${name}${if isStandalone then " <path>" else ""} [--format=dot|ascii|json]"
-        echo ""
-        echo "Visualize registry dependencies${if isStandalone then " for a directory" else ""}."
-        echo ""
-        echo "Options:"
-        echo "  --format=dot    Output Graphviz DOT format (default)"
-        echo "  --format=ascii  Output ASCII tree"
-        echo "  --format=json   Output JSON"
-        ${
-          if isStandalone then
-            ''
-              echo ""
-              echo "Examples:"
-              echo "  ${name} ./nix > deps.dot"
-              echo "  ${name} ./nix --format=ascii"
-            ''
-          else
-            ""
-        }
-      '';
-
-      # Output logic for pre-computed mode
-      precomputedOutput = ''
-                case "$FORMAT" in
-                  ascii)
-                    cat <<'GRAPH'
-        ${asciiOutput}
-        GRAPH
-                    ;;
-                  json)
-                    cat <<'GRAPH'
-        ${jsonOutput}
-        GRAPH
-                    ;;
-                  *)
-                    cat <<'GRAPH'
-        ${dotOutput}
-        GRAPH
-                    ;;
-                esac
-      '';
-
-      # Output logic for standalone mode (runtime nix eval)
-      standaloneOutput = ''
-        # Resolve to absolute path
-        TARGET_PATH="$(cd "$TARGET_PATH" && pwd)"
-
-        # Run the nix evaluation to generate the graph
-        ${pkgs.nix}/bin/nix eval --raw --impure --expr '
-          let
-            lib = (builtins.getFlake "${nixpkgsFlake}").lib;
-            analyzeLib = import ("${impSrc}" + "/src/analyze.nix") { inherit lib; };
-            registryLib = import ("${impSrc}" + "/src/registry.nix") { inherit lib; };
-
-            targetPath = /. + "'"$TARGET_PATH"'";
-            registry = registryLib.buildRegistry targetPath;
-            graph = analyzeLib.analyzeRegistry { inherit registry; };
-
-            formatted =
-              if "'"$FORMAT"'" == "ascii" then
-                analyzeLib.toAsciiTree graph
-              else if "'"$FORMAT"'" == "json" then
-                builtins.toJSON (analyzeLib.toJsonMinimal graph)
-              else
-                analyzeLib.toDot graph;
-          in
-          formatted
-        '
-      '';
-    in
-    pkgs.writeShellScript name ''
-      set -euo pipefail
-
-      ${lib.optionalString isStandalone "TARGET_PATH=\"\""}
-      FORMAT="dot"
-
-      for arg in "$@"; do
-        case "$arg" in
-          --format=*) FORMAT="''${arg#--format=}" ;;
-          --help|-h)
-            ${helpText}
-            exit 0
-            ;;
-          *)
-            ${if isStandalone then ''TARGET_PATH="$arg"'' else ""}
-            ;;
-        esac
-      done
-
-      ${lib.optionalString isStandalone ''
-        if [[ -z "$TARGET_PATH" ]]; then
-          echo "Error: No path specified" >&2
-          ${helpText}
-          exit 1
-        fi
-      ''}
-
-      ${if isStandalone then standaloneOutput else precomputedOutput}
-    '';
 
 in
 {
@@ -546,10 +291,5 @@ in
     analyzeMerge
     analyzeRegistry
     scanDir
-    toDot
-    toAsciiTree
-    toJson
-    toJsonMinimal
-    mkVisualizeScript
     ;
 }

@@ -8,7 +8,7 @@
   ...
 }:
 let
-  analyzeLib = import ../../src/analyze.nix { inherit lib; };
+  visualizeLib = import ../../src/visualize.nix { inherit lib; };
 in
 {
   tests = {
@@ -22,16 +22,13 @@ in
   };
 
   /*
-    Visualize registry dependencies as a DOT graph.
+    Visualize registry dependencies as an interactive HTML graph.
 
     Usage:
-      nix run .#visualize -- <path-to-nix-directory> [--format=dot|ascii|json]
+      nix run .#visualize -- <path-to-nix-directory> [--format=html|json]
 
     Examples:
-      nix run .#visualize -- ./nix > deps.dot
-      dot -Tsvg deps.dot > deps.svg
-
-      nix run .#visualize -- ./nix --format=ascii
+      nix run .#visualize -- ./nix > deps.html
 
     The tool scans the directory for a registry structure and analyzes
     all modules for cross-references.
@@ -45,7 +42,7 @@ in
     type = "app";
     meta.description = "Visualize imp registry dependencies (standalone)";
     program = toString (
-      analyzeLib.mkVisualizeScript {
+      visualizeLib.mkVisualizeScript {
         inherit pkgs;
         impSrc = self.sourceInfo or self;
         nixpkgsFlake = nixpkgs;

@@ -29,23 +29,13 @@ in
       expected = true;
     };
 
-  analyze."test toDot produces valid DOT output" =
+  analyze."test toHtml produces valid HTML output" =
     let
       result = analyze.analyzeRegistry { registry = testRegistry; };
-      dot = analyze.toDot result;
+      html = analyze.toHtml result;
     in
     {
-      expr = lib.hasPrefix "digraph" (lib.trim dot);
-      expected = true;
-    };
-
-  analyze."test toAsciiTree produces output" =
-    let
-      result = analyze.analyzeRegistry { registry = testRegistry; };
-      ascii = analyze.toAsciiTree result;
-    in
-    {
-      expr = lib.hasPrefix "imp Registry" ascii;
+      expr = lib.hasPrefix "<!DOCTYPE html>" (lib.trim html);
       expected = true;
     };
 

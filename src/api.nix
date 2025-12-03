@@ -268,13 +268,9 @@ in
 
       graph = imp.analyze.registry { registry = myRegistry; }
 
-    Format the graph as DOT (Graphviz):
+    Format the graph as HTML:
 
-      dotString = imp.analyze.toDot graph
-
-    Format as ASCII tree:
-
-      asciiString = imp.analyze.toAsciiTree graph
+      htmlString = imp.analyze.toHtml graph
 
     Get as JSON-serializable data:
 
@@ -284,5 +280,9 @@ in
     if updated.lib == null then
       throw "You need to call withLib before using analyze."
     else
-      import ./analyze.nix { inherit (updated) lib; };
+      let
+        analyzeLib = import ./analyze.nix { inherit (updated) lib; };
+        visualizeLib = import ./visualize.nix { inherit (updated) lib; };
+      in
+      analyzeLib // visualizeLib;
 }

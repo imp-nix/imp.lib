@@ -99,6 +99,8 @@ Click to expand overview sections below:
 | [`src/tree.nix`](src/tree.nix)                         | Tree building from directories                  |
 | [`src/registry.nix`](src/registry.nix)                 | Named module discovery and resolution           |
 | [`src/migrate.nix`](src/migrate.nix)                   | Registry rename detection and migration         |
+| [`src/analyze.nix`](src/analyze.nix)                   | Registry dependency graph analysis              |
+| [`src/visualize.nix`](src/visualize.nix)               | Graph output formats (HTML, JSON)               |
 | [`src/configTree.nix`](src/configTree.nix)             | NixOS/Home Manager config modules               |
 | [`src/mergeConfigTrees.nix`](src/mergeConfigTrees.nix) | Merge multiple config trees                     |
 | [`src/flakeModule.nix`](src/flakeModule.nix)           | Flake-parts integration module                  |
@@ -347,6 +349,35 @@ The tool:
 2. Compares against current registry to find broken references
 3. Matches old paths to new paths by leaf name (e.g., `home.alice` → `users.alice`)
 4. Uses [ast-grep](https://ast-grep.github.io/) for AST-aware replacements (handles multi-line expressions correctly)
+
+### Registry Visualization
+
+Visualize how modules reference each other through the registry. The `imp-vis` app generates an interactive HTML graph:
+
+```sh
+# Generate interactive HTML visualization
+nix run .#imp-vis > deps.html
+
+# Or output as JSON
+nix run .#imp-vis -- --format=json > deps.json
+```
+
+Open the HTML file in a browser to explore your module dependency graph:
+
+- **Nodes** represent registry entries (modules, hosts, users, etc.)
+- **Edges** show `registry.X.Y` references between modules
+- **Colors** indicate clusters (e.g., `modules.home`, `hosts`, `outputs`)
+- **Sink nodes** (final outputs like `nixosConfigurations`) are larger with permanent labels
+- **Animated dashed edges** show dependency direction
+- **Hover** to highlight connections; **drag** to reposition nodes (positions are fixed after drag)
+
+Nodes with identical edge topology are merged to reduce clutter (e.g., multiple features that all flow to the same outputs).
+
+The standalone `visualize` app works with any directory:
+
+```sh
+nix run .#visualize -- ./path/to/nix > deps.html
+```
 
 ### Collect Inputs
 

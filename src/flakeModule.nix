@@ -358,6 +358,7 @@ in
           };
 
           analyzeLib = import ./analyze.nix { inherit lib; };
+          visualizeLib = import ./visualize.nix { inherit lib; };
           graph = analyzeLib.analyzeRegistry { inherit registry; };
         in
         {
@@ -384,7 +385,7 @@ in
           # Run: nix run .#imp-vis [--format=dot|ascii|json]
           apps.imp-vis = {
             type = "app";
-            program = toString (analyzeLib.mkVisualizeScript { inherit pkgs graph; });
+            program = toString (visualizeLib.mkVisualizeScript { inherit pkgs graph; });
             meta.description = "Visualize registry dependencies";
           };
         };
