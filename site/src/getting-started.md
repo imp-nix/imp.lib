@@ -1,10 +1,6 @@
 # Getting Started
 
-This guide walks you through setting up Imp in your flake.
-
-## Installation
-
-Add `imp` to your flake inputs:
+Add imp to your flake:
 
 ```nix
 {
@@ -16,29 +12,21 @@ Add `imp` to your flake inputs:
 }
 ```
 
-## Basic Setup
-
-### Option 1: With flake-parts (Recommended)
-
-Imp provides a flake-parts module that auto-loads outputs from a directory:
+## With flake-parts
 
 ```nix
 {
   outputs = inputs@{ flake-parts, imp, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ imp.flakeModules.default ];
-
       systems = [ "x86_64-linux" "aarch64-linux" ];
-
       imp = {
-        src = ./outputs;            # Directory to load
-        args = { inherit inputs; }; # Extra args for all files
+        src = ./outputs;
+        args = { inherit inputs; };
       };
     };
 }
 ```
-
-Create your outputs directory:
 
 ```
 outputs/
@@ -50,9 +38,7 @@ outputs/
   overlays.nix        # -> flake.overlays
 ```
 
-### Option 2: As a Module Importer
-
-Use Imp directly to import a directory as a NixOS/Home Manager module:
+## As a module importer
 
 ```nix
 { inputs, ... }:
@@ -61,42 +47,15 @@ Use Imp directly to import a directory as a NixOS/Home Manager module:
 }
 ```
 
-### Option 3: As a Tree Builder
-
-Build a nested attribute set from a directory:
+## As a tree builder
 
 ```nix
-# Given outputs/ containing apps.nix and packages/foo.nix
 imp.treeWith lib import ./outputs
 # => { apps = <...>; packages = { foo = <...>; }; }
 ```
 
-## What Gets Passed to Files
+## Arguments passed to files
 
-### In `perSystem/` directory
+In `perSystem/`: `pkgs`, `lib`, `system`, `self`, `self'`, `inputs`, `inputs'`, `registry`, `imp`
 
-Files receive:
-
-- `pkgs` - nixpkgs for the current system
-- `lib` - nixpkgs lib
-- `system` - current system (e.g., "x86_64-linux")
-- `self` - the flake
-- `self'` - perSystem config for current system
-- `inputs` - flake inputs
-- `inputs'` - perSystem-ified inputs
-- `registry` - the module registry (if configured)
-
-### Outside `perSystem/`
-
-Files receive:
-
-- `lib` - nixpkgs lib
-- `self` - the flake
-- `inputs` - flake inputs
-- `registry` - the module registry (if configured)
-
-## Next Steps
-
-- Learn about [naming conventions](./concepts/naming-conventions.md)
-- Set up a [registry](./concepts/registry.md) for named module access
-- Use [config trees](./guides/config-trees.md) for option-based configuration
+Outside `perSystem/`: `lib`, `self`, `inputs`, `registry`, `imp`
