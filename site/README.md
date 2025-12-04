@@ -1,23 +1,33 @@
 # Site
 
-Documentation source for imp, built with mdbook.
+Documentation source for imp, built with `mdbook`.
 
 ## Development
 
 ```sh
 nix run .#docs        # serve with live reload
-nix run .#build-docs  # build to ./result
+nix run .#build-docs  # build to ./docs
 ```
 
-Both commands regenerate `src/reference/methods.md` from doc-comments in `src/api.nix` before building.
+Both commands auto-generate the reference documentation before building.
 
-## API Reference
+## Auto-generated Reference
 
-`src/reference/methods.md` is auto-generated from `src/api.nix` using nixdoc. To update it:
+The following files are generated automatically using [nixdoc](https://github.com/nix-community/nixdoc):
+
+- `src/reference/methods.md` - API methods from doc-comments in `src/*.nix`
+- `src/reference/options.md` - Module options from `src/options-schema.nix`
+
+### How it works
+
+**Methods documentation** is extracted from doc-comments (`/** ... */`) in `src/*`.
+
+The standalone utilities use nixdoc's `--export` flag to document specific let bindings.
+
+**Options documentation** uses nixdoc's `options` subcommand to render module options from `src/options-schema.nix`.
+
+### Manual building
 
 ```sh
 nix build .#api-reference
-cp result/methods.md src/reference/methods.md
 ```
-
-The file is checked into git so docs are browsable on GitHub. Regenerate before committing changes to `src/api.nix`.
