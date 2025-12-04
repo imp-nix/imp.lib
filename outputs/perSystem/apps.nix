@@ -201,7 +201,7 @@ in
 
   build-docs = {
     type = "app";
-    meta.description = "Build the Imp documentation to ./docs";
+    meta.description = "Build the Imp documentation './site/book' directory.";
     program = toString (
       pkgs.writeShellScript "build-docs" ''
         if [ ! -d "./site" ]; then
@@ -212,8 +212,8 @@ in
         echo "Generating API reference from src/*.nix..."
         ${generateApiRef} ./site ./src ./README.md ${optionsJsonFile}
 
-        ${pkgs.mdbook}/bin/mdbook build ./site --dest-dir "$(pwd)/docs"
-        echo "Documentation built to ./docs"
+        ${pkgs.mdbook}/bin/mdbook build ./site
+        echo "Documentation built './site/book' directory."
       ''
     );
   };
