@@ -7,8 +7,7 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     nix-unit.url = "github:nix-community/nix-unit";
     treefmt-nix.url = "github:numtide/treefmt-nix";
-    nixdoc.url = "github:Alb-O/nixdoc/feat/render-options";
-    nixdoc.inputs.nixpkgs.follows = "nixpkgs";
+    docgen.url = "github:Alb-O/docgen";
   };
 
   outputs =
@@ -18,7 +17,7 @@
       flake-parts,
       nix-unit,
       treefmt-nix,
-      nixdoc,
+      docgen,
       ...
     }:
     let
@@ -71,7 +70,7 @@
             nixpkgs
             nix-unit
             treefmt-nix
-            nixdoc
+            docgen
             ;
         };
       };

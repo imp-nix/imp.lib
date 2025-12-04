@@ -1,6 +1,6 @@
 # API Methods
 
-<!-- Auto-generated from src/*.nix - do not edit -->
+<!-- Auto-generated - do not edit -->
 
 ## `imp.filter` {#imp.filter}
 

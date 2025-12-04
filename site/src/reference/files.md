@@ -1,6 +1,6 @@
 # File Reference
 
-<!-- Auto-generated from src/*.nix file-level comments - do not edit -->
+<!-- Auto-generated - do not edit -->
 
 ## Core
 
