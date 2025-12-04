@@ -5,6 +5,7 @@
   - toJson: Full JSON with paths
   - toJsonMinimal: Minimal JSON without paths
   - toHtml: Interactive HTML visualization
+  - toHtmlWith: HTML visualization with custom colors
   - mkVisualizeScript: Shell script for CLI usage
 */
 { lib }:
@@ -42,7 +43,7 @@ let
   };
 
   # Default cluster colors for visualization
-  clusterColors = {
+  defaultClusterColors = {
     "modules.home" = "#1976d2";
     "modules.nixos" = "#7b1fa2";
     "outputs.nixosConfigurations" = "#e65100";
@@ -57,7 +58,7 @@ let
   };
 
   /**
-    Generate interactive HTML visualization using force-graph library.
+    Generate interactive HTML visualization with custom colors.
 
     Features: hover highlighting, cluster coloring, animated dashed directional edges, auto-fix on drag.
 
@@ -65,10 +66,31 @@ let
 
     graph
     : Graph with nodes and edges from analyze functions.
+
+    colors (optional)
+    : Custom cluster colors attrset. Merged with defaults.
+
+    # Example
+
+    ```nix
+    toHtmlWith {
+      inherit graph;
+      colors = {
+        "modules.custom" = "#ff5722";
+        "outputs.packages" = "#009688";
+      };
+    }
+    ```
   */
-  toHtml =
-    graph:
+  toHtmlWith =
+    {
+      graph,
+      colors ? { },
+    }:
     let
+      # Merge custom colors with defaults (custom takes precedence)
+      clusterColors = defaultClusterColors // colors;
+
       # Get leaf name (last segment of dotted path)
       leafName = id: lib.last (lib.splitString "." id);
 
@@ -160,6 +182,18 @@ let
       html = builtins.replaceStrings [ "/*SCRIPT*/" ] [ jsCode ] htmlTemplate;
     in
     html;
+
+  /**
+    Generate interactive HTML visualization using force-graph library.
+
+    Features: hover highlighting, cluster coloring, animated dashed directional edges, auto-fix on drag.
+
+    # Arguments
+
+    graph
+    : Graph with nodes and edges from analyze functions.
+  */
+  toHtml = graph: toHtmlWith { inherit graph; };
 
   /**
     Build a shell script that outputs the graph in the requested format.
@@ -301,9 +335,12 @@ in
 {
   inherit
     toHtml
+    toHtmlWith
     toJson
     toJsonMinimal
     mkVisualizeScript
-    clusterColors
     ;
+
+  # Export default colors for reference/extension
+  clusterColors = defaultClusterColors;
 }

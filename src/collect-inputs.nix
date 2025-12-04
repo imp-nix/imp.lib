@@ -116,12 +116,18 @@ let
         let
           entryPath = path + "/${name}";
           entryType = entries.${name};
+          # For symlinks, resolve the target type
+          resolvedType =
+            if entryType == "symlink" then
+              builtins.readFileType entryPath
+            else
+              entryType;
         in
         if isExcluded entryPath then
           acc
-        else if entryType == "regular" && builtins.match ".*\\.nix" name != null then
+        else if resolvedType == "regular" && builtins.match ".*\\.nix" name != null then
           processFile acc entryPath
-        else if entryType == "directory" then
+        else if resolvedType == "directory" then
           # Check for default.nix
           let
             defaultPath = entryPath + "/default.nix";
@@ -134,6 +140,7 @@ let
             # Recurse into directory
             processDir acc entryPath
         else
+          # Skip non-nix files, unknown types, or broken symlinks
           acc;
     in
     builtins.foldl' process acc names;
@@ -142,7 +149,13 @@ let
   collectInputs =
     path:
     let
-      pathType = builtins.readFileType path;
+      rawPathType = builtins.readFileType path;
+      # Resolve symlinks to their target type
+      pathType =
+        if rawPathType == "symlink" then
+          builtins.readFileType path
+        else
+          rawPathType;
       initial = {
         inputs = { };
         conflicts = [ ];
@@ -154,6 +167,7 @@ let
         else if pathType == "directory" then
           processDir initial path
         else
+          # Unknown type (shouldn't normally happen)
           initial;
 
       # Format conflict error message
