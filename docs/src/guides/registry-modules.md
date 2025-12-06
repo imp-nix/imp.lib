@@ -1,43 +1,44 @@
 # Registry Module Pattern
 
-Registry modules can declare flake inputs and overlays inline, alongside the module definition itself. This keeps related concerns together: the module that needs NUR extensions declares the NUR input right there, not in some distant `flake.nix`.
+Registry modules can declare flake inputs and overlays inline, alongside the module definition. The module that needs NUR extensions declares the NUR input right there, not in `flake.nix`.
 
 ```nix
 # nix/registry/modules/home/features/firefox/default.nix
-{ inputs, ... }:
 {
   __inputs = {
     nur.url = "github:nix-community/NUR";
     nur.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  __overlays.nur = inputs.nur.overlays.default;
+  __functor = _: { inputs, ... }: {
+    __overlays.nur = inputs.nur.overlays.default;
 
-  __module = { config, lib, pkgs, ... }: {
-    programs.firefox = {
-      enable = true;
-      extensions.packages = with pkgs.nur.repos.rycee.firefox-addons; [
-        ublock-origin
-        darkreader
-      ];
+    __module = { config, lib, pkgs, ... }: {
+      programs.firefox = {
+        enable = true;
+        extensions.packages = with pkgs.nur.repos.rycee.firefox-addons; [
+          ublock-origin
+          darkreader
+        ];
+      };
     };
   };
 }
 ```
 
-The file returns a function taking `{ inputs, ... }` and returning an attrset with three special attributes: `__inputs` declares what this module needs in the flake, `__overlays` exports overlays to be applied to nixpkgs, and `__module` contains the actual NixOS/Home-Manager module.
+The file returns an attrset with `__inputs` at the top level and `__functor` containing the callable module logic. When `nix run .#imp-flake` scans this file, it reads `__inputs` directly from the attrset without calling anything. At runtime, imp calls `__functor` to get the registry wrapper containing `__overlays` and `__module`.
 
-## How `__inputs` Collection Works
+## Why `__functor`
 
-When `imp.flakeFile.enable = true`, the flakeModule scans both `imp.src` (outputs directory) and `imp.registry.src` (registry directory) for `__inputs` declarations. This happens in `collect-inputs.nix`.
+Input collection happens before the flake is evaluated, so `inputs` doesn't exist yet. If a file is a plain function `{ inputs, ... }: { __inputs = ...; }`, the collector would have to call it to read `__inputs`, but it can't supply valid `inputs`.
 
-For plain attrsets, extraction is straightforward: check for `__inputs` attribute and return it. Functions require more work. The collector introspects the function's formal parameters via `builtins.functionArgs`, builds mock arguments that satisfy those parameters, calls the function, and extracts `__inputs` from the result. The mocks in `collect-inputs.nix` cover common patterns: `lib` gets a mock with `mkOption`, `mkIf`, type definitions, and string functions. `pkgs` gets a minimal mock with `system` and `callPackage`. These mocks only need to avoid crashing during evaluation long enough to read `__inputs`.
+The `__functor` pattern separates static metadata from runtime logic. `__inputs` sits outside the function, readable by simple attrset inspection. The actual module code goes in `__functor`, evaluated later when `inputs` is available.
 
-After collection, `nix run .#imp-flake` regenerates `flake.nix` with all declared inputs merged. Conflicting definitions (same input name, different URL) produce an error listing the conflicting sources.
+Files that don't declare `__inputs` can use either pattern. A plain function `{ pkgs, ... }: { ... }` works fine for registry modules that only reference inputs already declared elsewhere.
 
 ## How `imp.imports` Extracts `__module`
 
-User configs call `imp.imports` to process a list of registry paths:
+User configs call `imp.imports` to process registry paths:
 
 ```nix
 { registry, imp, lib, ... }:
@@ -45,47 +46,50 @@ User configs call `imp.imports` to process a list of registry paths:
   imports = imp.imports [
     registry.modules.home.base
     registry.modules.home.features.firefox
-    registry.modules.home.features.opencode
   ];
 }
 ```
 
-The `imp.imports` function in `api.nix` distinguishes three cases:
+The function distinguishes three cases:
 
 1. Registry nodes (attrsets with `__path`): import the path and process
 1. Plain paths: import and process
 1. Everything else: pass through unchanged
 
-"Processing" means detecting registry wrapper functions and transforming them into standard modules. A registry wrapper is identified by `builtins.functionArgs`: it takes `inputs` but not `config` or `pkgs`. Normal NixOS modules take `{ config, lib, pkgs, ... }`.
+Processing means detecting registry wrappers and extracting `__module`. A registry wrapper is a function that takes `inputs` but not `config` or `pkgs`. Normal NixOS modules take `{ config, lib, pkgs, ... }`, so the heuristic reliably separates the two.
 
-For registry wrappers, `imp.imports` returns a replacement function that:
-
-1. Declares common module args explicitly (`config`, `lib`, `pkgs`, `options`, `modulesPath`, `inputs`, `osConfig`) so the module system passes them
-1. When called, invokes the original registry wrapper with these args
-1. Extracts `__module` from the result
-1. Calls `__module` with the same args and returns its result
-
-The explicit arg declaration matters because the NixOS module system uses `builtins.functionArgs` to determine what to pass. A wrapper with just `{ ... }@args` receives nothing useful. Declaring `{ pkgs ? null, lib ? null, ... }@args` ensures the module system provides those values.
+For `__functor` attrsets, `imp.imports` calls the functor to get the registry wrapper, then extracts `__module` from the result. For plain registry wrapper functions, it calls them with the module args.
 
 ## Why Two Function Calls
 
-The original registry wrapper is `{ inputs, ... }: { __inputs; __module }`. When evaluated, it returns an attrset. The `__module` inside is itself a function `{ config, lib, pkgs, ... }: { ... }` expecting module args.
+Consider the evaluation sequence for a `__functor` file:
 
-The module system calls a module function once and expects an attrset back. If our wrapper returned `__module` directly, the module system would see a function and fail with "does not look like a module". The wrapper must call both: first the registry wrapper to get `{ __module }`, then `__module` itself to get the final config attrset.
+1. Import returns `{ __inputs; __functor }`
+1. Call `__functor _` with module args to get `{ __overlays; __module }`
+1. `__module` is itself a function `{ config, lib, pkgs, ... }: { ... }`
+1. Call `__module` with module args to get the final config
+
+The module system calls a module function once and expects an attrset. The wrapper must invoke both: first the registry wrapper to obtain `__module`, then `__module` itself to produce the config the module system expects.
 
 ## Overlay Application
 
-The `__overlays` attribute declares overlays this module needs applied to nixpkgs. Collection and application requires explicit wiring. A typical setup has an `overlays.nix` in outputs:
+The `__overlays` attribute declares overlays this module needs applied to nixpkgs. A typical setup has an `overlays.nix` in outputs that aggregates them:
 
 ```nix
 # nix/outputs/overlays.nix
-{ inputs, ... }:
 {
-  nur = inputs.nur.overlays.default;
+  __inputs = {
+    nur.url = "github:nix-community/NUR";
+    nur.inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  __functor = _: { inputs, ... }: {
+    nur = inputs.nur.overlays.default;
+  };
 }
 ```
 
-And a base NixOS module that applies them:
+A base NixOS module applies them:
 
 ```nix
 # nix/registry/modules/nixos/base.nix
@@ -95,10 +99,8 @@ And a base NixOS module that applies them:
 }
 ```
 
-Automatic overlay collection from `__overlays` is not implemented. The declarations serve as documentation and require manual aggregation.
+Automatic overlay collection from `__overlays` in registry modules is not implemented. The declarations serve as documentation and require manual aggregation in `overlays.nix`.
 
 ## Limitations
 
-The mock-based input collection cannot handle all code patterns. Functions that eagerly evaluate expressions involving their arguments will fail. The collector uses `builtins.tryEval` and `builtins.deepSeq` to catch errors gracefully, returning empty inputs rather than crashing.
-
-Registry wrapper detection uses a heuristic: "takes `inputs`, not `config` or `pkgs`". A module taking both `inputs` and `config` won't be detected as a registry wrapper and its `__module` won't be extracted. Structure such modules to separate the input-receiving outer function from the config-receiving inner module.
+Registry wrapper detection uses a heuristic: "takes `inputs`, not `config` or `pkgs`". A function taking both `inputs` and `config` won't be detected as a registry wrapper. Structure such modules with a clear separation: the outer `__functor` receives `inputs`, the inner `__module` receives `config`.
