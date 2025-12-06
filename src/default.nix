@@ -19,6 +19,17 @@ let
     and merges them into a single attrset. Detects conflicts when the
     same input name has different definitions in different files.
 
+    Only attrsets with `__inputs` are collected. For files that need to
+    be functions (e.g., to receive `inputs` at runtime), use the `__functor`
+    pattern so `__inputs` is accessible without calling the function:
+
+    ```nix
+    {
+      __inputs.foo.url = "github:foo/bar";
+      __functor = _: { inputs, ... }: inputs.foo.lib.something;
+    }
+    ```
+
     Accepts either a single path or a list of paths. When given multiple
     paths, all are scanned and merged with conflict detection.
 
