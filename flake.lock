@@ -116,6 +116,35 @@
         "type": "github"
       }
     },
+    "imp-refactor": {
+      "inputs": {
+        "imp-fmt": [
+          "imp-fmt"
+        ],
+        "nix-unit": [
+          "nix-unit"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "treefmt-nix": [
+          "treefmt-nix"
+        ]
+      },
+      "locked": {
+        "lastModified": 1765101865,
+        "narHash": "sha256-QDS8JqPUEdGHCuVPfkDjt9dS9sayuNULhM15BuXDjGs=",
+        "owner": "imp-nix",
+        "repo": "imp.refactor",
+        "rev": "ee04d4c11fc36322ac9adb06625b427afa5dba88",
+        "type": "github"
+      },
+      "original": {
+        "owner": "imp-nix",
+        "repo": "imp.refactor",
+        "type": "github"
+      }
+    },
     "nix-github-actions": {
       "inputs": {
         "nixpkgs": [
@@ -201,6 +230,7 @@
         "flake-parts": "flake-parts",
         "imp-fmt": "imp-fmt",
         "imp-graph": "imp-graph",
+        "imp-refactor": "imp-refactor",
         "nix-unit": "nix-unit",
         "nixpkgs": "nixpkgs",
         "treefmt-nix": "treefmt-nix"
