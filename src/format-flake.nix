@@ -91,11 +91,11 @@ let
     else
       throw "formatValue: unsupported type: ${builtins.typeOf value}";
 
-  # Check if an input override is just { follows = "..."; }
+  # Check if an input override is just `{ follows = "..."; }`
   isFollowsOnly = v: builtins.isAttrs v && builtins.attrNames v == [ "follows" ];
 
   # Format input overrides (the `inputs` attr of a flake input)
-  # Uses shorthand: inputs.nixpkgs.follows = "nixpkgs";
+  # Uses shorthand: `inputs.nixpkgs.follows = "nixpkgs";`
   formatInputOverrides =
     depth: name: overrides:
     let
@@ -138,7 +138,7 @@ let
       ];
       hasOther = otherAttrs != { };
 
-      # Simple case: just { url = "..."; }
+      # Simple case: just `{ url = "..."; }`
       isSimple = names == [ "url" ];
 
       # Can use shorthand: url + optional inputs with follows

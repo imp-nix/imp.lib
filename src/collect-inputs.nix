@@ -2,7 +2,7 @@
   Collects __inputs declarations from directory trees.
   Standalone implementation - no nixpkgs dependency, only builtins.
 
-  Scans .nix files recursively for `__inputs` attribute declarations and
+  Scans `.nix` files recursively for `__inputs` attribute declarations and
   merges them, detecting conflicts when the same input name has different
   definitions in different files.
 
@@ -34,7 +34,7 @@
   : Directory/file path, or list of paths, to scan for __inputs declarations.
 */
 let
-  # Check if path should be excluded (starts with _ in basename)
+  # Check if path should be excluded (starts with `_` in basename)
   isExcluded =
     path:
     let
@@ -46,7 +46,7 @@ let
 
   isAttrs = builtins.isAttrs;
 
-  # Safely extract __inputs, catching evaluation errors with tryEval
+  # Safely extract `__inputs`, catching evaluation errors with `tryEval`
   safeExtractInputs =
     value:
     let
@@ -61,7 +61,7 @@ let
     else
       { };
 
-  # Import a .nix file and extract __inputs from attrsets only
+  # Import a `.nix` file and extract `__inputs` from attrsets only
   importAndExtract =
     path:
     let
@@ -72,7 +72,7 @@ let
     else if isAttrs imported.value then
       safeExtractInputs imported.value
     else
-      # Functions are not called - use __functor pattern for functions with __inputs
+      # Functions are not called - use `__functor` pattern for functions with `__inputs`
       { };
 
   # Compare two input definitions for equality
@@ -121,7 +121,7 @@ let
         }
     ) existing newNames;
 
-  # Process a single .nix file
+  # Process a single `.nix` file
   processFile =
     acc: path:
     let

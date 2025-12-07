@@ -1,9 +1,9 @@
 /**
   Builds nested attrset from directory structure.
 
-  Naming:  foo.nix | foo/default.nix -> { foo = ... }
-           foo_.nix                  -> { foo = ... }  (escapes reserved names)
-           _foo.nix | _foo/          -> ignored
+  Naming:  `foo.nix` | `foo/default.nix` -> `{ foo = ... }`
+           `foo_.nix`                  -> `{ foo = ... }`  (escapes reserved names)
+           `_foo.nix` | `_foo/`          -> ignored
 
   # Example
 

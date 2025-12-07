@@ -70,7 +70,7 @@ in
   filterNot = predicate: accAttr "filterf" (andNot predicate);
 
   /**
-    Filter paths by regex. Uses builtins.match.
+    Filter paths by regex. Uses `builtins.match`.
 
     # Example
 
@@ -102,7 +102,7 @@ in
   matchNot = regex: accAttr "filterf" (andNot (matchesRegex regex));
 
   /**
-    Replace the default filter. By default, imp finds .nix files
+    Replace the default filter. By default, imp finds `.nix` files
     and excludes paths containing underscore prefixes.
 
     # Example
@@ -136,7 +136,7 @@ in
   map = f: accAttr "mapf" (compose f);
 
   /**
-    Transform values when building a tree with .tree. Composes with multiple calls.
+    Transform values when building a tree with `.tree`. Composes with multiple calls.
 
     # Example
 
@@ -154,7 +154,7 @@ in
   mapTree = f: accAttr "treef" (compose f);
 
   /**
-    Provide nixpkgs lib. Required before using .leafs, .files, .tree, or .configTree.
+    Provide nixpkgs `lib`. Required before using `.leafs`, `.files`, `.tree`, or `.configTree`.
 
     # Example
 
@@ -190,7 +190,7 @@ in
   addPath = path: accAttr "paths" (p: p ++ [ path ]);
 
   /**
-    Extend imp with custom methods. Methods receive self for chaining.
+    Extend imp with custom methods. Methods receive `self` for chaining.
 
     # Example
 
@@ -228,7 +228,7 @@ in
   pipeTo = f: mergeAttrs { pipef = f; };
 
   /**
-    Get the list of matched files. Requires .withLib.
+    Get the list of matched files. Requires `.withLib`.
 
     # Example
 
@@ -243,7 +243,7 @@ in
   files = current.leafs.result;
 
   /**
-    Build a nested attrset from directory structure. Requires .withLib.
+    Build a nested attrset from directory structure. Requires `.withLib`.
 
     Directory names become attribute names. Files are imported and their
     values placed at the corresponding path.
@@ -270,7 +270,7 @@ in
       } path;
 
   /**
-    Convenience function combining .withLib, .mapTree, and .tree.
+    Convenience function combining `.withLib`, `.mapTree`, and `.tree`.
 
     # Example
 
@@ -323,7 +323,7 @@ in
       } path;
 
   /**
-    Like .configTree but passes extra arguments to each file.
+    Like `.configTree` but passes extra arguments to each file.
 
     # Example
 
@@ -365,7 +365,7 @@ in
     # Arguments
 
     options (optional)
-    : Attribute set with strategy ("override" or "merge") and extraArgs.
+    : Attribute set with `strategy` (`"override"` or `"merge"`) and `extraArgs`.
 
     paths
     : List of directories to merge.
@@ -406,12 +406,12 @@ in
   /**
     Build a modules list from mixed items. Handles paths, registry nodes, and modules.
 
-    For registry nodes or paths that import to attrsets with __module,
-    extracts just the __module. For functions that are "registry wrappers"
-    (take `inputs` arg and return attrsets with __module), wraps them to
-    extract __module from the result.
+    For registry nodes or paths that import to attrsets with `__module`,
+    extracts just the `__module`. For functions that are "registry wrappers"
+    (take `inputs` arg and return attrsets with `__module`), wraps them to
+    extract `__module` from the result.
 
-    This allows registry modules to declare __inputs and __overlays
+    This allows registry modules to declare `__inputs` and `__overlays`
     without polluting the module system.
 
     # Example
@@ -437,8 +437,8 @@ in
       registryLib = import ./registry.nix { lib = updated.lib or builtins; };
       isPath = p: builtins.isPath p || (builtins.isString p && builtins.substring 0 1 p == "/");
 
-      # Registry wrappers: functions taking `inputs` (not `config`/`pkgs`) that return { __module, ... }
-      # Also handles attrsets with __functor (callable attrsets)
+      # Registry wrappers: functions taking `inputs` (not `config`/`pkgs`) that return `{ __module, ... }`
+      # Also handles attrsets with `__functor` (callable attrsets)
       isRegistryWrapper =
         value:
         let
@@ -447,10 +447,10 @@ in
         in
         args ? inputs && !(args ? config) && !(args ? pkgs);
 
-      # For attrsets with __module, extract it directly.
-      # For registry wrapper functions (or __functor attrsets), create a wrapper that calls the function,
-      # extracts __module, and calls it with module args. Explicit arg declarations
-      # are required because the module system uses builtins.functionArgs.
+      # For attrsets with `__module`, extract it directly.
+      # For registry wrapper functions (or `__functor` attrsets), create a wrapper that calls the function,
+      # extracts `__module`, and calls it with module args. Explicit arg declarations
+      # are required because the module system uses `builtins.functionArgs`.
       extractModule =
         value:
         if builtins.isAttrs value && value ? __module then

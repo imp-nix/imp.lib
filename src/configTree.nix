@@ -1,7 +1,7 @@
 /**
   Builds a NixOS/Home Manager module where directory structure = option paths.
 
-  Each file receives module args ({ config, lib, pkgs, ... }) plus extraArgs,
+  Each file receives module args (`{ config, lib, pkgs, ... }`) plus `extraArgs`,
   and returns config values. The path becomes the option path:
 
   - `programs/git.nix` -> `{ programs.git = <result>; }`
@@ -82,7 +82,7 @@ let
             in
             lib.removeSuffix "_" withoutNix;
 
-          # Skip default.nix at root level - it's the entry point, not a config file
+          # Skip `default.nix` at root level - it's the entry point, not a config file
           shouldInclude =
             name:
             !(lib.hasPrefix "_" name)

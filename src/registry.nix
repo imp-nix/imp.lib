@@ -52,7 +52,7 @@
   }
   ```
 
-  Note: Directories are "path-like" (have __path) so they work with `imp`.
+  Note: Directories are "path-like" (have `__path`) so they work with `imp`.
 */
 {
   lib,
@@ -61,7 +61,7 @@
 let
   /**
     Build registry from a directory.
-    Returns nested attrset where each directory has __path and child entries.
+    Returns nested attrset where each directory has `__path` and child entries.
 
     # Arguments
 
@@ -95,10 +95,10 @@ let
             hasDefault = builtins.pathExists (path + "/default.nix");
           in
           if hasDefault then
-            # Directory with default.nix is a single module
+            # Directory with `default.nix` is a single module
             { ${attrName} = path; }
           else
-            # Directory without default.nix: include __path + recurse into children
+            # Directory without `default.nix`: include `__path` + recurse into children
             {
               ${attrName} = {
                 __path = path;
@@ -114,7 +114,7 @@ let
     lib.foldl' (acc: x: acc // x) { } processed;
 
   /**
-    Check if a value is a registry node (has __path).
+    Check if a value is a registry node (has `__path`).
 
     # Arguments
 
@@ -125,7 +125,7 @@ let
 
   /**
     Get the path from a registry value.
-    Works for both direct paths and registry nodes with __path.
+    Works for both direct paths and registry nodes with `__path`.
 
     # Arguments
 

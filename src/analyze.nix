@@ -31,7 +31,7 @@
 { lib }:
 let
   /**
-    Scan a directory and build a list of all .nix files with their logical paths.
+    Scan a directory and build a list of all `.nix` files with their logical paths.
 
     # Example
 
@@ -93,7 +93,7 @@ let
   /**
     Analyze a single configTree, returning nodes and edges.
 
-    The path should be a directory. We scan it for .nix files and
+    The path should be a directory. We scan it for `.nix` files and
     read each one to check for registry references.
 
     Note: We only collect refs from files directly in this directory,
@@ -126,12 +126,12 @@ let
         let
           filePath = path + "/${name}";
           content = builtins.readFile filePath;
-          # Find registry.foo.bar patterns
+          # Find `registry.foo.bar` patterns
           matches = builtins.split "(registry\\.[a-zA-Z0-9_.]+)" content;
           refs = lib.filter (m: builtins.isList m) matches;
           refStrings = map (m: builtins.elemAt m 0) refs;
           uniqueRefs = lib.unique refStrings;
-          # File id: for default.nix use parent id, otherwise parent.filename
+          # File id: for `default.nix` use parent id, otherwise `parent.filename`
           fileId = if name == "default.nix" then id else "${id}.${lib.removeSuffix ".nix" name}";
         in
         {
@@ -171,7 +171,7 @@ let
     : List of { id, path } for each source tree.
 
     strategy
-    : Merge strategy ("merge" or "override").
+    : Merge strategy (`"merge"` or `"override"`).
   */
   analyzeMerge =
     {
@@ -221,7 +221,7 @@ let
     : Registry attrset to analyze.
 
     outputsSrc
-    : Optional path to outputs directory (e.g., imp.src). Files here that
+    : Optional path to outputs directory (e.g., `imp.src`). Files here that
       reference registry paths will be included as output nodes.
   */
   analyzeRegistry =
@@ -326,7 +326,7 @@ let
           }
         else
           let
-            # Scan all .nix files in outputs directory
+            # Scan all `.nix` files in outputs directory
             scannedFiles = scanDir outputsSrc;
 
             # Analyze each file for registry references
@@ -334,12 +334,12 @@ let
               file:
               let
                 content = builtins.readFile file.path;
-                # Find registry.foo.bar patterns
+                # Find `registry.foo.bar` patterns
                 matches = builtins.split "(registry\\.[a-zA-Z0-9_.]+)" content;
                 refs = lib.filter (m: builtins.isList m) matches;
                 refStrings = map (m: builtins.elemAt m 0) refs;
                 uniqueRefs = lib.unique refStrings;
-                # Build id from segments: outputs.nixosConfigurations.myhost
+                # Build id from segments: `outputs.nixosConfigurations.myhost`
                 fileId = "outputs.${lib.concatStringsSep "." file.segments}";
               in
               if uniqueRefs == [ ] then
@@ -351,7 +351,7 @@ let
                     path = file.path;
                     type = "output";
                   };
-                  # Edge direction: from=source (what's imported), to=destination (consumer)
+                  # Edge direction: `from=source` (what's imported), `to=destination` (consumer)
                   # This matches registry edges and means arrows point toward sinks (outputs)
                   edges = map (ref: {
                     from = lib.removePrefix "registry." ref;
@@ -374,7 +374,7 @@ let
       # Build set of known node IDs for validation
       knownIds = lib.listToAttrs (map (n: lib.nameValuePair n.id true) allNodes);
 
-      # Resolve edge sources: convert registry.X.Y to just X.Y and validate
+      # Resolve edge sources: convert `registry.X.Y` to just `X.Y` and validate
       resolvedEdges = map (
         edge:
         let

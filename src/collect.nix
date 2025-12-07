@@ -23,8 +23,8 @@ in
 /**
   Core evaluation: applies filters/maps and produces the final result.
 
-  When pipef is null, returns a NixOS module.
-  Otherwise, applies pipef to the collected file list.
+  When `pipef` is null, returns a NixOS module.
+  Otherwise, applies `pipef` to the collected file list.
 */
 {
   lib ? null,
@@ -78,7 +78,7 @@ let
         else
           [ p ];
 
-      # Default: .nix files, excluding paths with /_
+      # Default: .nix files, excluding paths with `/_`
       nixFilter = andNot (lib.hasInfix "/_") (lib.hasSuffix ".nix");
       initialFilter = if initf != null then initf else nixFilter;
 
