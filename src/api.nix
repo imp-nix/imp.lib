@@ -437,15 +437,18 @@ in
       registryLib = import ./registry.nix { lib = updated.lib or builtins; };
       isPath = p: builtins.isPath p || (builtins.isString p && builtins.substring 0 1 p == "/");
 
-      # Registry wrappers: functions taking `inputs` (not `config`/`pkgs`) that return `{ __module, ... }`
+      # Registry wrappers: functions taking flake-level args (inputs, exports, registry)
+      # that are NOT NixOS module functions (which take config, pkgs, etc.)
       # Also handles attrsets with `__functor` (callable attrsets)
       isRegistryWrapper =
         value:
         let
           fn = if builtins.isAttrs value && value ? __functor then value.__functor value else value;
           args = if builtins.isFunction fn then builtins.functionArgs fn else { };
+          hasFlakeArgs = args ? inputs || args ? exports || args ? registry;
+          hasModuleArgs = args ? config || args ? pkgs;
         in
-        args ? inputs && !(args ? config) && !(args ? pkgs);
+        hasFlakeArgs && !hasModuleArgs;
 
       # For attrsets with `__module`, extract it directly.
       # For registry wrapper functions (or `__functor` attrsets), create a wrapper that calls the function,
@@ -466,6 +469,8 @@ in
             options ? null,
             modulesPath ? null,
             inputs ? null,
+            exports ? null,
+            registry ? null,
             osConfig ? null,
             ...
           }@args:

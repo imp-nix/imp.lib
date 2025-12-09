@@ -5,38 +5,30 @@
   Scans `.nix` files recursively for `__exports` attribute declarations and
   collects them, tracking source paths for debugging and conflict detection.
 
-  Note: Only attrsets with `__exports` are collected. For functions that
-  need to declare exports, use the `__functor` pattern:
+  Handles two patterns:
+  1. Static exports: attrsets with __exports at top level
+  2. Functor exports: attrsets with __functor that returns __exports when called
 
-  ```nix
-  {
-    __exports = {
-      "nixos.role.desktop.services" = {
-        value = { pipewire.enable = true; };
-        strategy = "merge";
-      };
-    };
-    __functor = _: { inputs, ... }: { __module = ...; };
-  }
-  ```
+  For functors, the functor is called with empty args to extract exports.
+  The actual values are lazy (Nix thunks) so inputs etc. aren't evaluated
+  until the module is actually used.
 
   # Example
 
   ```nix
-  # Single path
-  collectExports ./nix/registry
-  # => {
-  #   "nixos.role.desktop.services" = [
-  #     {
-  #       source = "/nix/registry/mod/nixos/features/desktop/audio.nix";
-  #       value = { pipewire.enable = true; };
-  #       strategy = "merge";
-  #     }
-  #   ];
-  # }
+  # Static pattern
+  {
+    __exports."sink.name".value = { config = ...; };
+    __module = ...;
+  }
 
-  # Multiple paths (merged)
-  collectExports [ ./nix/registry ./nix/features ]
+  # Functor pattern (for modules needing inputs)
+  {
+    __inputs = { foo.url = "..."; };
+    __functor = _: { inputs, ... }:
+      let mod = { ... };
+      in { __exports."sink.name".value = mod; __module = mod; };
+  }
   ```
 
   # Arguments
@@ -56,6 +48,7 @@ let
     builtins.substring 0 1 basename == "_";
 
   isAttrs = builtins.isAttrs;
+  isFunction = builtins.isFunction;
 
   # Safely extract `__exports`, catching evaluation errors with `tryEval`
   safeExtractExports =
@@ -72,7 +65,42 @@ let
     else
       { };
 
-  # Import a `.nix` file and extract `__exports` from attrsets only
+  # Try to call a functor and extract exports from the result
+  # For functors needing inputs, we pass a stub - values are lazy thunks
+  # We use tryEval heavily because calling the functor may fail for modules
+  # that depend on specific input values
+  tryFunctorExports =
+    value:
+    if isAttrs value && value ? __functor then
+      let
+        # Call outer functor (typically _: innerFn)
+        innerFn = builtins.tryEval (value.__functor value);
+      in
+      if innerFn.success && isFunction innerFn.value then
+        let
+          # Check what args the inner function needs
+          innerArgs = builtins.tryEval (builtins.functionArgs innerFn.value);
+        in
+        if innerArgs.success then
+          let
+            # Build stub args - empty attrsets for required params
+            stubArgs = builtins.mapAttrs (name: hasDefault: if hasDefault then null else { }) innerArgs.value;
+            # Call inner function with stubs, wrapped in tryEval
+            result = builtins.tryEval (innerFn.value stubArgs);
+          in
+          if result.success && isAttrs result.value then safeExtractExports result.value else { }
+        else
+          { }
+      else if innerFn.success && isAttrs innerFn.value then
+        # Functor returned an attrset directly
+        safeExtractExports innerFn.value
+      else
+        { }
+    else
+      { };
+
+  # Import a `.nix` file and extract `__exports` from attrsets
+  # Handles both static exports and functor patterns
   importAndExtract =
     path:
     let
@@ -81,9 +109,15 @@ let
     if !imported.success then
       { }
     else if isAttrs imported.value then
-      safeExtractExports imported.value
+      let
+        # Try static exports first
+        staticExports = safeExtractExports imported.value;
+        # If none, try functor pattern
+        functorExports = if staticExports == { } then tryFunctorExports imported.value else { };
+      in
+      if staticExports != { } then staticExports else functorExports
     else
-      # Functions are not called - use `__functor` pattern for functions with `__exports`
+      # Plain functions without __functor are not supported
       { };
 
   # Normalize export entry: ensure it has value and optional strategy

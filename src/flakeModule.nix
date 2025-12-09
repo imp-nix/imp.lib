@@ -80,6 +80,8 @@ let
     # Allow access to top-level options for introspection
     inherit (config) systems;
     ${cfg.registry.name} = registry;
+    # Export sinks for direct access (avoids self.exports circular dependency)
+    exports = exportSinks;
   }
   // cfg.args;
 
@@ -105,18 +107,7 @@ let
     else
       null;
 
-  # Flake file generation
-  flakeFileCfg = cfg.flakeFile;
-
-  # Collect inputs from both outputs dir and registry dir
-  inputSources = builtins.filter (p: p != null) [
-    cfg.src
-    cfg.registry.src
-  ];
-  collectedInputs =
-    if flakeFileCfg.enable && inputSources != [ ] then impLib.collectInputs inputSources else { };
-
-  # Export sinks configuration
+  # Export sinks configuration (defined early for inclusion in flakeArgs)
   exportsCfg = cfg.exports;
 
   # Determine sources for export scanning
@@ -143,6 +134,17 @@ let
       }
     else
       { };
+
+  # Flake file generation
+  flakeFileCfg = cfg.flakeFile;
+
+  # Collect inputs from both outputs dir and registry dir
+  inputSources = builtins.filter (p: p != null) [
+    cfg.src
+    cfg.registry.src
+  ];
+  collectedInputs =
+    if flakeFileCfg.enable && inputSources != [ ] then impLib.collectInputs inputSources else { };
 
   generatedFlakeContent =
     if flakeFileCfg.enable then
