@@ -1,46 +1,62 @@
 /**
-  Collects __host declarations from directory trees.
+  Scan directories for `__host` declarations and collect host metadata.
 
-  Scans `.nix` files for `__host` attribute declarations, collecting
-  host configuration metadata that imp uses to generate nixosConfigurations.
+  Recursively walks the given path(s), importing each `.nix` file and extracting
+  any `__host` attrset. Returns an attrset mapping host names to their declarations.
+  Host names derive from directory names (for `default.nix` files) or filenames
+  (for other `.nix` files, minus the extension).
+
+  Files and directories starting with `_` are excluded. If a directory contains
+  `default.nix`, that file is processed and recursion stops; subdirectories are
+  not scanned.
+
+  # Type
+
+  ```
+  collectHosts :: (path | [path]) -> {
+    <hostName> = {
+      __host = { system, stateVersion, bases?, sinks?, hmSinks?, modules?, user? };
+      config = path | null;
+      extraConfig = module | null;
+      __source = string;  # path to source file
+    };
+  }
+  ```
+
+  # Example
+
+  ```nix
+  collectHosts ./registry/hosts
+  # => {
+  #   desktop = { __host = { system = "x86_64-linux"; ... }; config = ./desktop/config; ... };
+  #   server = { __host = { ... }; ... };
+  # }
+  ```
 
   # Host Schema
+
+  Each collected host contains the raw `__host` attrset from the file:
 
   ```nix
   {
     __host = {
-      # Required
-      system = "x86_64-linux";
-      stateVersion = "24.11";
-
-      # Sinks to import (string keys from exports)
-      sinks = [ "shared.nixos" "desktop.nixos" ];
-
-      # HM sinks for the user (if using integrated HM)
-      hmSinks = [ "shared.hm" "desktop.hm" ];
-
-      # Base config trees to merge
-      bases = [ "hosts.shared.base" "hosts.shared.desktop-base" ];
-
-      # Extra NixOS modules to import
-      modules = [ ];
-
-      # User name for HM integration (null = no HM)
-      user = "albert";
+      system = "x86_64-linux";      # target architecture
+      stateVersion = "24.11";       # NixOS state version
+      bases = [ "hosts.shared.base" ];  # registry paths to base config trees
+      sinks = [ "shared.nixos" ];   # export sink paths for NixOS modules
+      hmSinks = [ "shared.hm" ];    # export sink paths for Home Manager
+      modules = [ "mod.nixos.ssh" "@foo.nixosModules.bar" ];  # extra modules
+      user = "alice";               # username for HM integration (null = disabled)
     };
-
-    # Host-specific config (module or path to config tree)
-    config = ./config;
-
-    # Optional extra config as a module
-    extraConfig = { ... }: { };
+    config = ./config;              # host-specific config tree path
+    extraConfig = { modulesPath, ... }: { };  # module with access to modulesPath
   }
   ```
 
-  # Arguments
-
-  pathOrPaths
-  : Directory/file path, or list of paths, to scan for __host declarations.
+  Modules in the `modules` list resolve as:
+  - Plain strings: registry paths (`"mod.nixos.ssh"` -> `registry.mod.nixos.ssh`)
+  - `@`-prefixed strings: input paths (`"@foo.bar"` -> `inputs.foo.bar`)
+  - Functions/attrsets: passed through unchanged
 */
 let
   # Check if path should be excluded (starts with `_` in basename)

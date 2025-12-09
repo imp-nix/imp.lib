@@ -1,25 +1,70 @@
 /**
-  Build nixosConfigurations from collected host declarations.
+  Generate `nixosConfigurations` from collected host declarations.
 
-  Takes host declarations collected by collect-hosts.nix and generates
-  nixosConfigurations attrset suitable for flake outputs.
+  Takes the output of `collectHosts` and produces an attrset of NixOS system
+  configurations suitable for `flake.nixosConfigurations`. Each host's `__host`
+  schema controls what modules are assembled and how Home Manager integrates.
 
-  # Arguments
+  # Type
 
-  lib
-  : nixpkgs lib (must have nixosSystem)
+  ```
+  buildHosts :: {
+    lib,              # nixpkgs lib (needs nixosSystem)
+    imp,              # bound imp instance (imp.withLib lib)
+    hosts,            # output from collectHosts
+    flakeArgs,        # { self, inputs, registry, exports, ... }
+    hostDefaults?,    # default values for host fields
+  } -> { <hostName> = <nixosConfiguration>; }
+  ```
 
-  imp
-  : Bound imp instance with lib
+  # Module assembly
 
-  hosts
-  : Output from collectHosts
+  For each host, modules are assembled in order:
 
-  flakeArgs
-  : Standard flake args { self, inputs, registry, exports, ... }
+  1. Merged config tree from `bases` paths plus `config` path (via `imp.mergeConfigTrees`)
+  2. `home-manager.nixosModules.home-manager`
+  3. Resolved sink modules from `sinks` list
+  4. Home Manager integration module (if `user` is set)
+  5. Resolved extra modules from `modules` list
+  6. `extraConfig` module (if present)
+  7. `{ system.stateVersion = ...; }`
 
-  hostDefaults
-  : Default values for host config (optional)
+  # Path resolution
+
+  String values in `bases`, `sinks`, `hmSinks`, and `modules` resolve against
+  either the registry or flake inputs:
+
+  - `"hosts.shared.base"` resolves to `registry.hosts.shared.base`
+  - `"@nixos-wsl.nixosModules.default"` resolves to `inputs.nixos-wsl.nixosModules.default`
+
+  The `@` prefix distinguishes input paths from registry paths.
+
+  # Home Manager integration
+
+  When `user` is set, the generated configuration includes:
+
+  ```nix
+  {
+    home-manager = {
+      useGlobalPkgs = true;
+      useUserPackages = true;
+      extraSpecialArgs = { inputs, exports, imp, registry };
+      users.${user}.imports = [ <hmSink modules> <registry.users.${user} if exists> ];
+    };
+  }
+  ```
+
+  # Example
+
+  ```nix
+  buildHosts {
+    inherit lib imp;
+    hosts = collectHosts ./registry/hosts;
+    flakeArgs = { inherit self inputs registry exports; };
+    hostDefaults = { system = "x86_64-linux"; };
+  }
+  # => { desktop = <nixosConfiguration>; server = <nixosConfiguration>; }
+  ```
 */
 {
   lib,

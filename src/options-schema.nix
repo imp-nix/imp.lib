@@ -216,6 +216,17 @@ in
     hosts = {
       enable = mkEnableOption "automatic nixosConfigurations from __host declarations" // {
         default = false;
+        description = ''
+          Generate nixosConfigurations by scanning for __host declarations.
+
+          When enabled, imp walks hosts.sources looking for .nix files that
+          contain a __host attrset. Each such file becomes a nixosConfiguration
+          entry, named after the directory (for default.nix) or filename.
+
+          The __host schema declares system, stateVersion, base config trees,
+          export sinks, extra modules, and optional Home Manager integration.
+          See the Host Declarations concept documentation for the full schema.
+        '';
       };
 
       sources = mkOption {
@@ -224,8 +235,11 @@ in
         description = ''
           Directories to scan for __host declarations.
 
-          Each .nix file with a __host attrset becomes a nixosConfiguration.
-          By default, scans registry.src if set.
+          Each .nix file containing a __host attrset produces a nixosConfiguration.
+          Host names derive from directory names (for default.nix) or filenames
+          (minus .nix extension). Files in directories starting with _ are skipped.
+
+          Defaults to [ registry.src ] when registry.src is set.
         '';
         example = literalExpression ''
           [ ./nix/registry/hosts ]
@@ -236,9 +250,10 @@ in
         type = types.attrsOf types.unspecified;
         default = { };
         description = ''
-          Default values applied to all host declarations.
+          Default values for host declarations.
 
-          Host-specific values override these defaults.
+          These fill in any fields not explicitly set in __host. Common use:
+          setting system and stateVersion once instead of repeating per-host.
         '';
         example = literalExpression ''
           {

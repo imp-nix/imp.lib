@@ -186,3 +186,52 @@ devShells.nix -> perSystem.devShells
 nixosConfigurations/ -> flake.nixosConfigurations
 overlays.nix -> flake.overlays
 systems.nix -> systems (optional, overrides top-level)
+
+## `imp.hosts.enable` {#opt-imp-hosts-enable}
+
+**Type:** `boolean`
+
+**Default:** `false`
+
+Whether to enable automatic nixosConfigurations from `__host` declarations.
+
+When enabled, imp scans `hosts.sources` for files containing `__host` attrsets and generates `flake.nixosConfigurations` entries automatically.
+
+**Example:** `true`
+
+## `imp.hosts.sources` {#opt-imp-hosts-sources}
+
+**Type:** `list of absolute path`
+
+**Default:** `[ ]`
+
+Directories to scan for `__host` declarations.
+
+Each `.nix` file with a `__host` attrset becomes a nixosConfiguration. The host name derives from the directory name (for `default.nix`) or filename (for other files). Files in directories starting with `_` are excluded.
+
+By default, scans `registry.src` if set.
+
+**Example:**
+
+```nix
+[ ./nix/registry/hosts ]
+```
+
+## `imp.hosts.defaults` {#opt-imp-hosts-defaults}
+
+**Type:** `attribute set of unspecified value`
+
+**Default:** `{ }`
+
+Default values applied to all host declarations.
+
+Host-specific values in `__host` override these defaults. Useful for setting `system` or `stateVersion` once rather than repeating in every host file.
+
+**Example:**
+
+```nix
+{
+  system = "x86_64-linux";
+  stateVersion = "24.11";
+}
+```
