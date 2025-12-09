@@ -136,6 +136,68 @@ let
   */
   buildExportSinks = import ./export-sinks.nix;
 
+  /**
+    Scan directories for `__host` declarations and collect them.
+
+    Recursively scans .nix files for `__host` attribute declarations
+    and collects host configuration metadata.
+
+    # Example
+
+    ```nix
+    imp.collectHosts ./registry/hosts
+    # => {
+    #   desktop = {
+    #     __host = { system = "x86_64-linux"; stateVersion = "24.11"; ... };
+    #     __source = "/path/to/desktop/default.nix";
+    #     config = ./config;
+    #   };
+    # }
+    ```
+
+    # Arguments
+
+    pathOrPaths
+    : Directory/file path, or list of paths, to scan for __host declarations.
+  */
+  collectHosts = import ./collect-hosts.nix;
+
+  /**
+    Build nixosConfigurations from collected host declarations.
+
+    Takes host declarations and generates nixosConfigurations attrset.
+
+    # Example
+
+    ```nix
+    buildHosts {
+      lib = nixpkgs.lib;
+      imp = impWithLib;
+      hosts = imp.collectHosts ./hosts;
+      flakeArgs = { self, inputs, registry, exports, ... };
+    }
+    # => { desktop = <nixosConfiguration>; vm = <nixosConfiguration>; }
+    ```
+
+    # Arguments
+
+    lib
+    : nixpkgs lib (must have nixosSystem).
+
+    imp
+    : Bound imp instance with lib.
+
+    hosts
+    : Output from collectHosts.
+
+    flakeArgs
+    : Standard flake args { self, inputs, registry, exports, ... }.
+
+    hostDefaults
+    : Default values for host config (optional).
+  */
+  buildHosts = import ./build-hosts.nix;
+
   flakeFormat = import ./format-flake.nix;
   inherit (flakeFormat) formatInputs formatFlake;
 
@@ -241,6 +303,8 @@ let
               collectInputs
               collectExports
               buildExportSinks
+              collectHosts
+              buildHosts
               formatInputs
               formatFlake
               collectAndFormatFlake

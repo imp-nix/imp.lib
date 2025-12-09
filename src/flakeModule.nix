@@ -160,6 +160,34 @@ let
     else
       "";
 
+  # Host generation configuration
+  hostsCfg = cfg.hosts;
+
+  # Determine sources for host scanning
+  hostSources =
+    if hostsCfg.sources != [ ] then
+      hostsCfg.sources
+    else if cfg.registry.src != null then
+      [ cfg.registry.src ]
+    else
+      [ ];
+
+  # Collect and build hosts if enabled
+  collectedHosts =
+    if hostsCfg.enable && hostSources != [ ] then impLib.collectHosts hostSources else { };
+
+  generatedNixosConfigurations =
+    if hostsCfg.enable && collectedHosts != { } then
+      impLib.buildHosts {
+        lib = nixpkgsLib;
+        inherit imp;
+        hosts = collectedHosts;
+        inherit flakeArgs;
+        hostDefaults = hostsCfg.defaults;
+      }
+    else
+      { };
+
 in
 {
   # Use shared options schema for imp.* options
@@ -387,6 +415,30 @@ in
             };
           };
         };
+    })
+
+    # Auto-generated hosts from __host declarations
+    (lib.mkIf (hostsCfg.enable && collectedHosts != { }) {
+      /*
+        Generate nixosConfigurations from __host declarations.
+
+        Files in the registry can declare hosts:
+
+          {
+            __host = {
+              system = "x86_64-linux";
+              stateVersion = "24.11";
+              sinks = [ "shared.nixos" "desktop.nixos" ];
+              hmSinks = [ "shared.hm" "desktop.hm" ];
+              bases = [ "hosts.shared.base" ];
+              user = "albert";
+            };
+            config = ./config;
+          }
+
+        These are collected and built into nixosConfigurations automatically.
+      */
+      flake.nixosConfigurations = generatedNixosConfigurations;
     })
   ];
 }

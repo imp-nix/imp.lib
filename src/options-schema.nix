@@ -212,5 +212,41 @@ in
         description = "Header comment for generated flake.nix.";
       };
     };
+
+    hosts = {
+      enable = mkEnableOption "automatic nixosConfigurations from __host declarations" // {
+        default = false;
+      };
+
+      sources = mkOption {
+        type = types.listOf types.path;
+        default = [ ];
+        description = ''
+          Directories to scan for __host declarations.
+
+          Each .nix file with a __host attrset becomes a nixosConfiguration.
+          By default, scans registry.src if set.
+        '';
+        example = literalExpression ''
+          [ ./nix/registry/hosts ]
+        '';
+      };
+
+      defaults = mkOption {
+        type = types.attrsOf types.unspecified;
+        default = { };
+        description = ''
+          Default values applied to all host declarations.
+
+          Host-specific values override these defaults.
+        '';
+        example = literalExpression ''
+          {
+            system = "x86_64-linux";
+            stateVersion = "24.11";
+          }
+        '';
+      };
+    };
   };
 }
