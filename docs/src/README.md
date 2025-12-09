@@ -1,6 +1,8 @@
 # Imp 😈
 
-Nix flakes require explicit imports. Add a module, update the imports list. Reorganize your directory structure, fix every relative path. Imp removes this busywork: point it at a directory and it imports everything inside, automatically inferring and mapping filesystem paths to attribute names.
+<!-- Source: docs/src/README.md (repo root README.md symlinks from here) -->
+
+Nix flakes require explicit imports. Add a module, update the imports list. Reorganize your directory structure, fix every relative path. Imp removes this busywork: point it at a directory and it imports everything inside, mapping filesystem paths to attribute names.
 
 ```nix
 { inputs, ... }:
@@ -9,116 +11,92 @@ Nix flakes require explicit imports. Add a module, update the imports list. Reor
 }
 ```
 
-This imp-frastructure replaces an ever-growing list of explicit imports. Add a file to `modules/`, it gets imported. Remove it, it's no longer imported. No filepath bookkeeping.
+Add a file to `modules/`, it gets imported. Remove it, gone. No filepath bookkeeping.
 
-## Beyond just imp-orts 😈
+## Beyond imports
 
-Directory-based imports are the foundation, but Imp builds three more things on top:
+Directory-based imports are the foundation. Imp builds five more things on top:
 
-**Registries** give modules names instead of paths. Instead of `../../../modules/nixos/base.nix`, you write `registry.modules.nixos.base`. Rename a directory and the migration tool scans your codebase for broken `registry.X.Y` references, matches them to new paths by leaf name, and generates ast-grep commands to rewrite them.
+**Registries** give modules names instead of paths. Instead of `../../../modules/nixos/base.nix`, write `registry.modules.nixos.base`. Rename a directory and the migration tool scans for broken references, matches them to new paths by leaf name, and generates ast-grep commands to rewrite them.
 
 **Config trees** map directory structure to NixOS option paths. The file `programs/git.nix` sets `programs.git`. Your directory layout becomes a visual index of what's configured.
 
-**Input collection** scatters flake inputs next to the code that uses them. A formatter module declares its `treefmt-nix` dependency inline; imp collects these and regenerates `flake.nix`.
+**Input collection** scatters flake inputs next to the code that uses them. A formatter module declares its `treefmt-nix` dependency inline with `__inputs`; imp collects these and regenerates `flake.nix`.
+
+**Export sinks** reverse the import direction. Features declare where their configuration should land (`__exports."nixos.role.desktop"`), and consumers import the merged result. Multiple features targeting the same sink merge according to their strategy. This decouples features from the hosts that use them.
+
+**Host declarations** generate `nixosConfigurations` from `__host` attributes in the registry. Declare system, stateVersion, which sinks to import, and optional Home Manager integration. Imp assembles the configuration, no separate output file required.
 
 ## Installation
 
 ```nix
 {
-  inputs.imp.url = "github:imp-nix/imp.lib";
-  inputs.flake-parts.url = "github:hercules-ci/flake-parts";
+  imp.treeWith lib (f: f { inherit pkgs; }) ./outputs
+  # { packages.hello = <derivation>; apps.run = <derivation>; }
 }
 ```
 
-## Quick start
+## Export sinks
 
-With flake-parts (recommended):
+Features export configuration fragments to named sinks:
 
 ```nix
+# registry/features/audio.nix
 {
-  outputs = inputs@{ flake-parts, imp, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
-      imports = [ imp.flakeModules.default ];
-      systems = [ "x86_64-linux" "aarch64-linux" ];
-      imp = {
-        src = ./outputs;
-        registry.src = ./registry;
-      };
-    };
+  __exports."desktop.nixos" = {
+    value = { services.pipewire.enable = true; };
+  };
 }
 ```
 
-Standalone:
+The flake-parts module collects these and exposes them as `flake.exports`. Consumers import the merged sink:
 
 ```nix
-imp.treeWith lib (f: f { inherit pkgs; }) ./outputs
-# { packages.hello = <derivation>; apps.run = <derivation>; }
+{ exports, ... }:
+{
+  imports = [ exports.desktop.nixos.__module ];
+}
 ```
+
+Multiple features targeting the same sink merge according to their strategy (deep merge by default).
+
+## Host declarations
+
+Define hosts in the registry with `__host`:
+
+```nix
+# registry/hosts/workstation/default.nix
+{
+  __host = {
+    system = "x86_64-linux";
+    stateVersion = "24.11";
+    sinks = [ "desktop.nixos" ];
+    hmSinks = [ "desktop.hm" ];
+    user = "alice";
+  };
+  config = ./config;
+}
+```
+
+Enable host generation in your flake config:
+
+```nix
+imp = {
+  registry.src = ./registry;
+  hosts.enable = true;
+};
+```
+
+Imp scans for `__host` declarations and generates `flake.nixosConfigurations.workstation`. The `sinks` field imports export sinks; `user` wires up Home Manager integration. No separate nixosConfiguration file needed.
 
 ## Optional features
 
-Documentation generation and dependency visualization are available as opt-in modules. Each requires its own input, keeping the core imp.lib lockfile minimal.
+Documentation generation and dependency visualization are opt-in modules with their own inputs.
 
-**Documentation** with [imp.docgen](https://github.com/imp-nix/imp.docgen):
+**Documentation** with [imp.docgen](https://github.com/imp-nix/imp.docgen).
 
-```nix
-{
-  inputs.docgen.url = "github:imp-nix/imp.docgen";
-  inputs.docgen.inputs.nixpkgs.follows = "nixpkgs";
-
-  outputs = inputs@{ flake-parts, imp, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
-      imports = [
-        imp.flakeModules.default
-        imp.flakeModules.docs
-      ];
-      imp.docs = {
-        manifest = ./docs/manifest.nix;
-        srcDir = ./src;
-        siteDir = ./docs;
-      };
-    };
-}
-```
-
-This adds `apps.docs` (live reload server), `apps.build-docs`, and `packages.docs`.
-
-**Visualization** with [imp.graph](https://github.com/imp-nix/imp.graph):
-
-```nix
-{
-  inputs.imp-graph.url = "github:imp-nix/imp.graph";
-  inputs.imp-graph.inputs.nixpkgs.follows = "nixpkgs";
-
-  outputs = inputs@{ flake-parts, imp, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
-      imports = [
-        imp.flakeModules.default
-        imp.flakeModules.visualize
-      ];
-    };
-}
-```
-
-This adds `apps.visualize` for interactive dependency graphs. Run `nix run .#visualize` to analyze your registry.
+Run `nix run .#visualize` to analyze your registry and create a force graph visualization in the browser.
 
 ## Documentation
 
 [Full docs](https://imp-nix.github.io/imp.lib)
-
-## Development
-
-```sh
-nix run .#tests
-nix flake check
-nix fmt
-nix run .#docs
-```
-
-## Attribution
-
-Built on ideas from @vic's [dendritic](https://dendrix.oeiuwq.com/Dendritic.html) pattern, [import-tree](https://github.com/vic/import-tree), [flake-file](https://github.com/vic/flake-file), and [flake-aspects](https://github.com/vic/flake-aspects). Tree building inspired by [flakelight](https://github.com/nix-community/flakelight).
-
-## License
-
-[Apache-2.0](LICENSE)

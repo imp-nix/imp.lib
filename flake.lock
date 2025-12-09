@@ -16,11 +16,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1765232011,
-        "narHash": "sha256-vAgKyTEvCpZ/MMNlx2IEzS9Te0ZwMisXMgT/zutEiSY=",
+        "lastModified": 1765281178,
+        "narHash": "sha256-DnqfmVhX7rE2OGVlci0f7M4vSOgYi4uHG4Nccy8CmEg=",
         "owner": "imp-nix",
         "repo": "imp.docgen",
-        "rev": "966b482d45f1ea362a94170aac502dde2a0ede46",
+        "rev": "6ef741f293172e8e204cf4208982eb909397ff62",
         "type": "github"
       },
       "original": {

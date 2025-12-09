@@ -67,3 +67,5 @@ The `treeWith` function takes three arguments: `lib` (from nixpkgs), a transform
 ## Next steps
 
 Read about [directory-based imports](./concepts/directory-imports.md) to understand how imp maps files to attributes. If you're building NixOS or Home Manager configurations, [config trees](./guides/config-trees.md) show how directory paths can map directly to option paths. For larger projects, [the registry](./concepts/registry.md) provides named module references that survive refactoring.
+
+Once you have a registry, [export sinks](./concepts/exports.md) let features declare where their configuration lands rather than having consumers list every import. [Host declarations](./concepts/hosts.md) take this further: define `__host` in the registry and imp generates `nixosConfigurations` with sink imports, Home Manager integration, and config tree merging wired up.

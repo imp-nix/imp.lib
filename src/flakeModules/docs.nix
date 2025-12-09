@@ -108,6 +108,20 @@ in
         Prefix for options (e.g., "imp." for imp.* options).
       '';
     };
+
+    extraFiles = mkOption {
+      type = types.attrsOf types.path;
+      default = { };
+      description = ''
+        Extra files to copy into the documentation site.
+
+        Keys are destination paths relative to the site's src/ directory.
+        Values are source paths.
+      '';
+      example = lib.literalExpression ''
+        { "extra.md" = ./extra.md; }
+      '';
+    };
   };
 
   config = mkIf (config.imp.docs.enable && hasDocgen) (
@@ -132,7 +146,7 @@ in
 
           dg = inputs.docgen.mkDocgen {
             inherit pkgs;
-            inherit (cfg) name anchorPrefix;
+            inherit (cfg) name anchorPrefix extraFiles;
             manifest =
               if cfg.manifest == null then
                 throw "imp.docs.manifest must be set when docs are enabled"
