@@ -14,3 +14,4 @@ in
 // (import ./collect.nix args)
 // (import ./imports.nix args)
 // (import ./exports.nix args)
+// (import ./hosts.nix args)

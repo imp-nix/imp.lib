@@ -1,57 +1,60 @@
 /**
-  Generate `nixosConfigurations` from collected host declarations.
+  Generates `nixosConfigurations` from collected host declarations.
 
-  Takes the output of `collectHosts` and produces an attrset of NixOS system
-  configurations suitable for `flake.nixosConfigurations`. Each host's `__host`
-  schema controls what modules are assembled and how Home Manager integrates.
+  Takes `collectHosts` output and produces NixOS system configurations for
+  `flake.nixosConfigurations`. Each host's `__host` schema controls module
+  assembly and Home Manager integration.
 
   # Type
 
   ```
   buildHosts :: {
-    lib,              # nixpkgs lib (needs nixosSystem)
-    imp,              # bound imp instance (imp.withLib lib)
-    hosts,            # output from collectHosts
-    flakeArgs,        # { self, inputs, registry, exports, ... }
-    hostDefaults?,    # default values for host fields
+    lib, imp, hosts, flakeArgs, hostDefaults?
   } -> { <hostName> = <nixosConfiguration>; }
   ```
 
-  # Module assembly
+  # Module Assembly Order
 
-  For each host, modules are assembled in order:
-
-  1. Merged config tree from `bases` paths plus `config` path (via `imp.mergeConfigTrees`)
+  1. Merged config tree from `bases` + `config` paths
   2. `home-manager.nixosModules.home-manager`
-  3. Resolved sink modules from `sinks` list
-  4. Home Manager integration module (if `user` is set)
-  5. Resolved extra modules from `modules` list
+  3. Resolved sink modules from `sinks`
+  4. Home Manager integration module (if `user` set)
+  5. Extra modules from `modules`
   6. `extraConfig` module (if present)
   7. `{ system.stateVersion = ...; }`
 
-  # Path resolution
+  # Path Resolution
 
-  String values in `bases`, `sinks`, `hmSinks`, and `modules` resolve against
-  either the registry or flake inputs:
+  Strings in `bases`, `sinks`, `hmSinks`, `modules` resolve as:
 
-  - `"hosts.shared.base"` resolves to `registry.hosts.shared.base`
-  - `"@nixos-wsl.nixosModules.default"` resolves to `inputs.nixos-wsl.nixosModules.default`
+  - `"hosts.shared.base"` -> `registry.hosts.shared.base`
+  - `"@nixos-wsl.nixosModules.default"` -> `inputs.nixos-wsl.nixosModules.default`
 
-  The `@` prefix distinguishes input paths from registry paths.
+  # Modules as Function
 
-  # Home Manager integration
-
-  When `user` is set, the generated configuration includes:
+  The `modules` field can be a function receiving `{ registry, inputs, exports }`
+  for direct registry access, enabling static analysis:
 
   ```nix
-  {
-    home-manager = {
-      useGlobalPkgs = true;
-      useUserPackages = true;
-      extraSpecialArgs = { inputs, exports, imp, registry };
-      users.${user}.imports = [ <hmSink modules> <registry.users.${user} if exists> ];
-    };
-  }
+  __host = {
+    modules = { registry, ... }: [
+      registry.mod.os.desktop.keyboard
+      registry.mod.niri
+    ];
+  };
+  ```
+
+  # Home Manager Integration
+
+  When `user` is set:
+
+  ```nix
+  home-manager = {
+    useGlobalPkgs = true;
+    useUserPackages = true;
+    extraSpecialArgs = { inputs, exports, imp, registry };
+    users.${user}.imports = [ <hmSinks> <registry.users.${user}> ];
+  };
   ```
 
   # Example
@@ -81,8 +84,6 @@ let
     exports
     ;
 
-  # Resolve a registry path string to a value
-  # "hosts.shared.base" -> registry.hosts.shared.base
   resolveRegistryPath =
     pathStr:
     let
@@ -90,8 +91,6 @@ let
     in
     lib.getAttrFromPath parts registry;
 
-  # Resolve an input path string to a value
-  # "nixos-wsl.nixosModules.default" -> inputs.nixos-wsl.nixosModules.default
   resolveInputPath =
     pathStr:
     let
@@ -99,7 +98,6 @@ let
     in
     lib.getAttrFromPath parts inputs;
 
-  # Build modules for a single host
   buildHostModules =
     hostName: hostDef:
     let
@@ -107,19 +105,16 @@ let
       configPath = hostDef.config;
       extraConfig = hostDef.extraConfig;
 
-      # Resolve base config trees
       basePaths = map (base: if builtins.isString base then (resolveRegistryPath base).__path else base) (
         host.bases or [ ]
       );
 
-      # Build merged config tree from bases + host config
       configTreeModule =
         if basePaths != [ ] || configPath != null then
           imp.mergeConfigTrees (basePaths ++ lib.optional (configPath != null) configPath)
         else
           { };
 
-      # Resolve sink exports
       resolveSink =
         sinkPath:
         let
@@ -129,7 +124,6 @@ let
 
       sinkModules = map resolveSink (host.sinks or [ ]);
 
-      # HM integration module (if user specified)
       hmModule =
         if host.user or null != null then
           let
@@ -159,10 +153,6 @@ let
         else
           { };
 
-      # Resolve extra modules - can be:
-      # - Registry path strings: "mod.nixos.features.desktop.keyboard"
-      # - Input path strings prefixed with @: "@nixos-wsl.nixosModules.default"
-      # - Raw modules (functions or attrsets)
       resolveModule =
         mod:
         if builtins.isString mod then
@@ -173,9 +163,14 @@ let
         else
           mod;
 
-      extraModules = map resolveModule (host.modules or [ ]);
+      rawModules =
+        let
+          mods = host.modules or [ ];
+        in
+        if builtins.isFunction mods then mods { inherit registry inputs exports; } else mods;
 
-      # All modules combined
+      extraModules = map resolveModule rawModules;
+
       allModules = [
         configTreeModule
         inputs.home-manager.nixosModules.home-manager
@@ -190,7 +185,6 @@ let
     in
     allModules;
 
-  # Build a single nixosConfiguration
   buildHost =
     hostName: hostDef:
     let
@@ -203,16 +197,13 @@ let
         inherit
           self
           inputs
+          exports
           imp
           registry
-          exports
           ;
       };
       modules = buildHostModules hostName hostDef;
     };
 
-  # Build all hosts
-  nixosConfigurations = lib.mapAttrs buildHost hosts;
-
 in
-nixosConfigurations
+lib.mapAttrs buildHost hosts

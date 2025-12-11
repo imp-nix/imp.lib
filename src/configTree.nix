@@ -82,7 +82,6 @@ let
             in
             lib.removeSuffix "_" withoutNix;
 
-          # Skip `default.nix` at root level - it's the entry point, not a config file
           shouldInclude =
             name:
             !(lib.hasPrefix "_" name)

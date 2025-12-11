@@ -1,43 +1,41 @@
 /**
-  Collects __exports declarations from directory trees.
-  Standalone implementation - no nixpkgs dependency, only builtins.
+  Collects `__exports` declarations from directory trees.
 
-  Scans `.nix` files recursively for `__exports` attribute declarations and
-  collects them, tracking source paths for debugging and conflict detection.
+  Recursively scans `.nix` files for `__exports` attributes and collects them
+  with source paths for debugging and conflict detection. No nixpkgs dependency.
 
-  Handles two patterns:
-  1. Static exports: attrsets with __exports at top level
-  2. Functor exports: attrsets with __functor that returns __exports when called
+  Static exports sit at the top level. Functor exports (`__functor`) are called
+  with stub args to extract declarations; values remain lazy thunks until use.
 
-  For functors, the functor is called with empty args to extract exports.
-  The actual values are lazy (Nix thunks) so inputs etc. aren't evaluated
-  until the module is actually used.
+  # Export Syntax
 
-  # Example
+  Both flat string keys and nested attribute paths work:
 
   ```nix
-  # Static pattern
-  {
-    __exports."sink.name".value = { config = ...; };
-    __module = ...;
-  }
+  # Flat string keys
+  { __exports."sink.name".value = { config = ...; }; }
 
-  # Functor pattern (for modules needing inputs)
+  # Nested paths (enables static analysis by tools like imp-refactor)
+  { __exports.sink.name.value = { config = ...; }; }
+
+  # Functor pattern for modules needing inputs
   {
     __inputs = { foo.url = "..."; };
     __functor = _: { inputs, ... }:
       let mod = { ... };
-      in { __exports."sink.name".value = mod; __module = mod; };
+      in { __exports.sink.name.value = mod; __module = mod; };
   }
   ```
 
   # Arguments
 
   pathOrPaths
-  : Directory/file path, or list of paths, to scan for __exports declarations.
+  : Directory, file, or list of paths to scan.
 */
 let
-  # Check if path should be excluded (starts with `_` in basename)
+  isAttrs = builtins.isAttrs;
+  isFunction = builtins.isFunction;
+
   isExcluded =
     path:
     let
@@ -47,10 +45,6 @@ let
     in
     builtins.substring 0 1 basename == "_";
 
-  isAttrs = builtins.isAttrs;
-  isFunction = builtins.isFunction;
-
-  # Safely extract `__exports`, catching evaluation errors with `tryEval`
   safeExtractExports =
     value:
     let
@@ -65,42 +59,31 @@ let
     else
       { };
 
-  # Try to call a functor and extract exports from the result
-  # For functors needing inputs, we pass a stub - values are lazy thunks
-  # We use tryEval heavily because calling the functor may fail for modules
-  # that depend on specific input values
   tryFunctorExports =
     value:
     if isAttrs value && value ? __functor then
       let
-        # Call outer functor (typically _: innerFn)
         innerFn = builtins.tryEval (value.__functor value);
       in
       if innerFn.success && isFunction innerFn.value then
         let
-          # Check what args the inner function needs
           innerArgs = builtins.tryEval (builtins.functionArgs innerFn.value);
         in
         if innerArgs.success then
           let
-            # Build stub args - empty attrsets for required params
             stubArgs = builtins.mapAttrs (name: hasDefault: if hasDefault then null else { }) innerArgs.value;
-            # Call inner function with stubs, wrapped in tryEval
             result = builtins.tryEval (innerFn.value stubArgs);
           in
           if result.success && isAttrs result.value then safeExtractExports result.value else { }
         else
           { }
       else if innerFn.success && isAttrs innerFn.value then
-        # Functor returned an attrset directly
         safeExtractExports innerFn.value
       else
         { }
     else
       { };
 
-  # Import a `.nix` file and extract `__exports` from attrsets
-  # Handles both static exports and functor patterns
   importAndExtract =
     path:
     let
@@ -110,17 +93,16 @@ let
       { }
     else if isAttrs imported.value then
       let
-        # Try static exports first
         staticExports = safeExtractExports imported.value;
-        # If none, try functor pattern
         functorExports = if staticExports == { } then tryFunctorExports imported.value else { };
       in
       if staticExports != { } then staticExports else functorExports
     else
-      # Plain functions without __functor are not supported
       { };
 
-  # Normalize export entry: ensure it has value and optional strategy
+  # Leaf exports have `value` or `strategy`; non-leaves are nested containers
+  isLeafExport = entry: !isAttrs entry || entry ? value || entry ? strategy;
+
   normalizeExportEntry =
     sinkKey: entry:
     if isAttrs entry && entry ? value then
@@ -129,34 +111,47 @@ let
         strategy = entry.strategy or null;
       }
     else
-      # If just a raw value, wrap it
       {
         value = entry;
         strategy = null;
       };
 
-  # Process exports from a single file
+  # Flatten nested `__exports.a.b.value` into `"a.b"` sink keys
+  flattenExports =
+    prefix: exports:
+    let
+      keys = builtins.attrNames exports;
+    in
+    builtins.concatMap (
+      key:
+      let
+        entry = exports.${key};
+        sinkKey = if prefix == "" then key else "${prefix}.${key}";
+      in
+      if isLeafExport entry then [ { inherit sinkKey entry; } ] else flattenExports sinkKey entry
+    ) keys;
+
   processFileExports =
     sourcePath: exports:
     let
-      sinkKeys = builtins.attrNames exports;
+      flattened = flattenExports "" exports;
     in
     builtins.foldl' (
-      acc: sinkKey:
+      acc: item:
       let
-        entry = normalizeExportEntry sinkKey exports.${sinkKey};
+        entry = normalizeExportEntry item.sinkKey item.entry;
         exportRecord = {
           source = toString sourcePath;
           inherit (entry) value strategy;
         };
+        sinkKey = item.sinkKey;
       in
       acc
       // {
         ${sinkKey} = if acc ? ${sinkKey} then acc.${sinkKey} ++ [ exportRecord ] else [ exportRecord ];
       }
-    ) { } sinkKeys;
+    ) { } flattened;
 
-  # Merge exports from multiple files
   mergeExports =
     acc: newExports:
     let
@@ -173,7 +168,6 @@ let
       }
     ) { } uniqueKeys;
 
-  # Process a single `.nix` file
   processFile =
     acc: path:
     let
@@ -181,7 +175,6 @@ let
     in
     if exports == { } then acc else mergeExports acc (processFileExports path exports);
 
-  # Process a directory recursively
   processDir =
     acc: path:
     let
@@ -210,7 +203,6 @@ let
     in
     builtins.foldl' process acc names;
 
-  # Process a path (file or directory)
   processPath =
     acc: path:
     let
@@ -224,7 +216,6 @@ let
     else
       acc;
 
-  # Main: accepts path or list of paths
   collectExports =
     pathOrPaths:
     let

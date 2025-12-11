@@ -31,7 +31,22 @@ This file, placed at `registry/hosts/workstation/default.nix`, produces `flake.n
 
 `hmSinks` works identically for Home Manager. These sink modules land in `home-manager.users.${user}.imports` when `user` is set.
 
-`modules` accepts a list of extra modules. String values resolve as registry paths (`"mod.nixos.features.desktop.niri"` becomes `registry.mod.nixos.features.desktop.niri`). Prefix with `@` to resolve against flake inputs instead: `"@nixos-wsl.nixosModules.default"` becomes `inputs.nixos-wsl.nixosModules.default`. Raw modules (functions or attrsets) pass through unchanged.
+`modules` accepts a list of extra modules, or a function that returns a list. String values resolve as registry paths (`"mod.nixos.features.desktop.niri"` becomes `registry.mod.nixos.features.desktop.niri`). Prefix with `@` to resolve against flake inputs instead: `"@nixos-wsl.nixosModules.default"` becomes `inputs.nixos-wsl.nixosModules.default`. Raw modules (functions or attrsets) pass through unchanged.
+
+When `modules` is a function, it receives `{ registry, inputs, exports }` and returns a list. This enables direct registry attribute access, which tools like imp-refactor can analyze statically:
+
+```nix
+{
+  __host = {
+    system = "x86_64-linux";
+    stateVersion = "24.11";
+    modules = { registry, ... }: [
+      registry.mod.nixos.features.audio
+      registry.mod.nixos.features.desktop.niri
+    ];
+  };
+}
+```
 
 `user` enables integrated Home Manager. Imp configures `home-manager.users.${user}` with `useGlobalPkgs = true`, `useUserPackages = true`, and appropriate `extraSpecialArgs`. If `registry.users.${user}` exists, it's automatically imported into the user's HM config.
 

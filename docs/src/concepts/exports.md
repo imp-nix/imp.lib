@@ -6,11 +6,11 @@ This solves composition where features shouldn't know about their consumers. A d
 
 ## Declaration
 
-Files declare exports using the `__exports` attribute:
+Files declare exports using the `__exports` attribute with nested attribute paths:
 
 ```nix
 {
-  __exports."nixos.role.desktop.services" = {
+  __exports.nixos.role.desktop.services = {
     value = {
       pipewire.enable = true;
       wireplumber.enable = true;
@@ -24,13 +24,15 @@ Files declare exports using the `__exports` attribute:
 }
 ```
 
-The dotted path `nixos.role.desktop.services` identifies the sink. All exports targeting this path merge into a single value. The `strategy` field controls merge behavior; `merge` performs deep attrset merging where later values override earlier ones for non-attrset types.
+The nested path `__exports.nixos.role.desktop.services` identifies the sink. All exports targeting this path merge into a single value. The `strategy` field controls merge behavior; `merge` performs deep attrset merging where later values override earlier ones for non-attrset types.
+
+String keys also work (`__exports."nixos.role.desktop.services"`), but nested attributes enable static analysis by tools like imp-refactor that scan for registry references without evaluation.
 
 If a file needs arguments (like `inputs` or `pkgs`), use the `__functor` pattern so `__exports` remains accessible without function evaluation:
 
 ```nix
 {
-  __exports."hm.role.desktop" = {
+  __exports.hm.role.desktop = {
     value = { programs.fish.enable = true; };
   };
 
@@ -40,18 +42,16 @@ If a file needs arguments (like `inputs` or `pkgs`), use the `__functor` pattern
 }
 ```
 
-Multiple exports from a single file work by adding more keys to `__exports`:
+Multiple exports from a single file work by adding more paths under `__exports`:
 
 ```nix
 {
-  __exports = {
-    "nixos.role.desktop.services" = {
-      value = { greetd.enable = true; };
-      strategy = "merge";
-    };
-    "nixos.role.desktop.programs" = {
-      value = { wayland.enable = true; };
-    };
+  __exports.nixos.role.desktop.services = {
+    value = { greetd.enable = true; };
+    strategy = "merge";
+  };
+  __exports.nixos.role.desktop.programs = {
+    value = { wayland.enable = true; };
   };
 }
 ```
@@ -97,11 +97,11 @@ exports = {
 Each leaf node contains `__module` with the merged value and `__meta` with contributor paths and the effective strategy. Consumers import `__module`:
 
 ```nix
-{ inputs, ... }:
+# registry/mod/features/audio/default.nix
 {
-  imports = [
-    inputs.self.exports.nixos.role.desktop.services.__module
-  ];
+  __exports.desktop.nixos = {
+    value = { services.pipewire.enable = true; };
+  };
 }
 ```
 

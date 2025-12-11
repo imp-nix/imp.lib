@@ -205,14 +205,12 @@ With `merge`: options combine according to module system rules:
 
 ### registry.nix
 
-Registry: Named module discovery and resolution.
+Registry: named module discovery and resolution.
 
 Scans a directory tree and builds a nested attrset mapping names to paths.
-Files can then reference modules by name instead of relative paths.
+Files reference modules by name instead of relative paths.
 
 #### Example
-
-Directory structure:
 
 ```
 nix/
@@ -220,45 +218,34 @@ nix/
     alice/default.nix
     bob.nix
   modules/
-    nixos/
-      base.nix
-    home/
-      base.nix
+    nixos/base.nix
+    home/base.nix
 ```
 
-Produces registry:
+Produces:
 
 ```nix
 {
   home = {
-    __path = <nix/home>;  # directory itself
+    __path = <nix/home>;
     alice = <path>;
     bob = <path>;
   };
-  modules = {
-    __path = <nix/modules>;
-    nixos = {
-      __path = <nix/modules/nixos>;
-      base = <path>;
-    };
-    home = { ... };
-  };
+  modules.nixos = { __path = <nix/modules/nixos>; base = <path>; };
 }
 ```
 
-Usage in files:
+Usage:
 
 ```nix
 { registry, ... }:
 {
-  # Use the directory path
-  imports = [ (imp registry.modules.nixos) ];
-  # Or a specific file
-  imports = [ registry.modules.home.base ];
+  imports = [ (imp registry.modules.nixos) ];  # directory
+  imports = [ registry.modules.home.base ];    # file
 }
 ```
 
-Note: Directories are "path-like" (have `__path`) so they work with `imp`.
+Directories have `__path` so they work with `imp`.
 
 ### analyze.nix
 
@@ -299,59 +286,53 @@ Visualization output for dependency graphs.
 
 ### collect-exports.nix
 
-Collects \_\_exports declarations from directory trees.
-Standalone implementation - no nixpkgs dependency, only builtins.
+Collects `__exports` declarations from directory trees.
 
-Scans `.nix` files recursively for `__exports` attribute declarations and
-collects them, tracking source paths for debugging and conflict detection.
+Recursively scans `.nix` files for `__exports` attributes and collects them
+with source paths for debugging and conflict detection. No nixpkgs dependency.
 
-Handles two patterns:
+Static exports sit at the top level. Functor exports (`__functor`) are called
+with stub args to extract declarations; values remain lazy thunks until use.
 
-1. Static exports: attrsets with \_\_exports at top level
-1. Functor exports: attrsets with \_\_functor that returns \_\_exports when called
+#### Export Syntax
 
-For functors, the functor is called with empty args to extract exports.
-The actual values are lazy (Nix thunks) so inputs etc. aren't evaluated
-until the module is actually used.
-
-#### Example
+Both flat string keys and nested attribute paths work:
 
 ```nix
-# Static pattern
-{
-  __exports."sink.name".value = { config = ...; };
-  __module = ...;
-}
+# Flat string keys
+{ __exports."sink.name".value = { config = ...; }; }
 
-# Functor pattern (for modules needing inputs)
+# Nested paths (enables static analysis by tools like imp-refactor)
+{ __exports.sink.name.value = { config = ...; }; }
+
+# Functor pattern for modules needing inputs
 {
   __inputs = { foo.url = "..."; };
   __functor = _: { inputs, ... }:
     let mod = { ... };
-    in { __exports."sink.name".value = mod; __module = mod; };
+    in { __exports.sink.name.value = mod; __module = mod; };
 }
 ```
 
 #### Arguments
 
 pathOrPaths
-: Directory/file path, or list of paths, to scan for \_\_exports declarations.
+: Directory, file, or list of paths to scan.
 
 ### export-sinks.nix
 
-Build sinks from collected exports with merge strategy support.
+Materializes sinks from collected exports by applying merge strategies.
 
-Takes the output from collectExports and produces materialized sinks
-by applying merge strategies. Each sink becomes a usable Nix value
-(typically a module or attrset).
+Takes `collectExports` output and produces usable Nix values (modules or
+attrsets) by merging contributions according to their strategies.
 
 #### Merge Strategies
 
-- `merge`: Deep merge using lib.recursiveUpdate (last wins for primitives)
+- `merge`: Deep merge via `lib.recursiveUpdate` (last wins for primitives)
 - `override`: Last writer completely replaces earlier values
-- `list-append`: Concatenate lists (error if non-list)
-- `mkMerge`: For module functions, wraps in { imports = [...]; }. For
-  plain attrsets, uses lib.mkMerge for module system semantics.
+- `list-append`: Concatenate lists (errors on non-lists)
+- `mkMerge`: Module functions become `{ imports = [...]; }`;
+  plain attrsets use `lib.mkMerge`
 
 #### Example
 
@@ -360,47 +341,21 @@ buildExportSinks {
   lib = nixpkgs.lib;
   collected = {
     "nixos.role.desktop" = [
-      {
-        source = "/path/to/audio.nix";
-        value = { services.pipewire.enable = true; };
-        strategy = "merge";
-      }
-      {
-        source = "/path/to/wayland.nix";
-        value = { services.greetd.enable = true; };
-        strategy = "merge";
-      }
+      { source = "/audio.nix"; value = { services.pipewire.enable = true; }; strategy = "merge"; }
+      { source = "/wayland.nix"; value = { services.greetd.enable = true; }; strategy = "merge"; }
     ];
   };
-  sinkDefaults = {
-    "nixos.*" = "merge";
-    "hm.*" = "merge";
-  };
+  sinkDefaults = { "nixos.*" = "merge"; };
 }
-# => {
-#   nixos.role.desktop = {
-#     __module = { ... merged module ... };
-#     __meta = {
-#       contributors = [ "/path/to/audio.nix" "/path/to/wayland.nix" ];
-#       keys = [ "nixos.role.desktop" ];
-#     };
-#   };
-# }
+# => { nixos.role.desktop = { __module = { ... }; __meta = { ... }; }; }
 ```
 
 #### Arguments
 
-lib
-: nixpkgs lib for merge operations (required for mkMerge strategy).
-
-collected
-: Output from collectExports - attrset of sink keys to export records.
-
-sinkDefaults
-: Optional attrset mapping glob patterns to default strategies.
-
-enableDebug
-: Include \_\_meta with contributor info (default: true).
+lib : nixpkgs lib for merge operations.
+collected : Output from `collectExports`.
+sinkDefaults : Glob patterns to default strategies (e.g., `{ "nixos.*" = "merge"; }`).
+enableDebug : Include `__meta` with contributor info (default: true).
 
 ## Flake Integration
 

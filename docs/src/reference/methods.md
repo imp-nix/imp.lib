@@ -352,85 +352,69 @@ json = (imp.withLib lib).analyze.toJson graph
 
 ## `imp.buildRegistry` {#imp.buildRegistry}
 
-Build registry from a directory.
-Returns nested attrset where each directory has `__path` and child entries.
+Build registry from a directory. Each directory gets `__path` plus child entries.
 
 ### Arguments
 
-root
-: Root directory path to scan.
+root : Root directory path to scan.
 
 ## `imp.flattenRegistry` {#imp.flattenRegistry}
 
 Flatten registry to dot-notation paths.
 
-### Example
-
 ```nix
 flattenRegistry registry
-# => { home.alice = <path>; modules.nixos = <path>; modules.nixos.base = <path>; }
+# => { home.alice = <path>; modules.nixos.base = <path>; }
 ```
 
-### Arguments
+`registry`
 
-registry
-: Registry attrset to flatten.
+: Function argument
 
 ## `imp.lookup` {#imp.lookup}
 
 Lookup a dotted path in the registry.
 
-### Example
-
 ```nix
-lookup "home.alice" registry
-# => <path>
+lookup "home.alice" registry  # => <path>
 ```
 
-### Arguments
+`path`
 
-path
-: Dot-separated path string (e.g. "home.alice").
+: Function argument
 
-registry
-: Registry attrset to search.
+`registry`
+
+: Function argument
 
 ## `imp.makeResolver` {#imp.makeResolver}
 
-Create a resolver function that looks up names in the registry.
-Returns a function: name -> path
-
-### Example
+Create resolver function: name -> path.
 
 ```nix
 resolve = makeResolver registry;
-resolve "home.alice"
-# => <path>
+resolve "home.alice"  # => <path>
 ```
 
-### Arguments
+`registry`
 
-registry
-: Registry attrset to create resolver for.
+: Function argument
 
 ## `imp.toPath` {#imp.toPath}
 
-Get the path from a registry value.
-Works for both direct paths and registry nodes with `__path`.
+Extract path from registry value. Works for paths and `__path` nodes.
 
-### Arguments
+`x`
 
-x
-: Registry value (path or node with \_\_path).
+: Function argument
 
 ## `imp.isRegistryNode` {#imp.isRegistryNode}
 
 Check if a value is a registry node (has `__path`).
 
-### Arguments
+`x`
 
-x
-: Value to check.
+: Function argument
 
 ## Format Flake
 

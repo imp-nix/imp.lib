@@ -11,7 +11,7 @@ let
 in
 {
   # Test basic export collection
-  exports."collect finds __exports declarations" = {
+  exports."test collect finds __exports declarations" = {
     expr =
       let
         collected = collectExports testPath;
@@ -22,7 +22,7 @@ in
     expected = true;
   };
 
-  exports."collected exports have source paths" = {
+  exports."test collected exports have source paths" = {
     expr =
       let
         collected = collectExports testPath;
@@ -33,7 +33,7 @@ in
     expected = true;
   };
 
-  exports."collected exports track strategies" = {
+  exports."test collected exports track strategies" = {
     expr =
       let
         collected = collectExports testPath;
@@ -46,7 +46,7 @@ in
   };
 
   # Test merge strategies
-  exports."merge strategy combines attrsets" = {
+  exports."test merge strategy combines attrsets" = {
     expr =
       let
         collected = collectExports testPath;
@@ -62,7 +62,7 @@ in
     expected = true;
   };
 
-  exports."list-append strategy concatenates lists" = {
+  exports."test list-append strategy concatenates lists" = {
     expr =
       let
         collected = collectExports testPath;
@@ -83,7 +83,7 @@ in
     expected = true;
   };
 
-  exports."override strategy uses last value" = {
+  exports."test override strategy uses last value" = {
     expr =
       let
         collected = collectExports testPath;
@@ -99,7 +99,7 @@ in
   };
 
   # Test metadata
-  exports."debug mode includes metadata at leaf nodes" = {
+  exports."test debug mode includes metadata at leaf nodes" = {
     expr =
       let
         collected = collectExports testPath;
@@ -116,7 +116,7 @@ in
     expected = true;
   };
 
-  exports."metadata lists all contributors for a sink" = {
+  exports."test metadata lists all contributors for a sink" = {
     expr =
       let
         collected = collectExports testPath;
@@ -133,7 +133,7 @@ in
   };
 
   # Test sink defaults
-  exports."sink defaults apply when no strategy specified" = {
+  exports."test sink defaults apply when no strategy specified" = {
     expr =
       let
         collected = collectExports testPath;
@@ -152,7 +152,7 @@ in
   };
 
   # Test __functor pattern
-  exports."__functor pattern works with exports" = {
+  exports."test __functor pattern works with exports" = {
     expr =
       let
         collected = collectExports testPath;
@@ -163,7 +163,7 @@ in
   };
 
   # Test multiple export keys from one file
-  exports."multiple export keys from same file" = {
+  exports."test multiple export keys from same file" = {
     expr =
       let
         collected = collectExports testPath;
@@ -176,7 +176,7 @@ in
   };
 
   # Test nested sink paths
-  exports."sink paths create nested structure" = {
+  exports."test sink paths create nested structure" = {
     expr =
       let
         collected = collectExports testPath;
@@ -195,7 +195,7 @@ in
   };
 
   # Test empty directory
-  exports."empty directory returns empty attrset" = {
+  exports."test empty directory returns empty attrset" = {
     expr =
       let
         collected = collectExports ./fixtures/hello;
@@ -205,7 +205,7 @@ in
   };
 
   # Test single file path
-  exports."single file path works" = {
+  exports."test single file path works" = {
     expr =
       let
         collected = collectExports ./fixtures/exports-test/features/packages.nix;
@@ -216,7 +216,7 @@ in
   };
 
   # Test shorthand export syntax (value only, no strategy)
-  exports."shorthand export syntax works" = {
+  exports."test shorthand export syntax works" = {
     expr =
       let
         collected = collectExports testPath;
@@ -230,7 +230,7 @@ in
   };
 
   # Test convenience wrapper
-  exports."exportSinks convenience wrapper works" = {
+  exports."test exportSinks convenience wrapper works" = {
     expr =
       let
         lit = imp.withLib lib;
@@ -238,6 +238,35 @@ in
         hasDesktop = sinks ? nixos && sinks.nixos ? role;
       in
       hasDesktop;
+    expected = true;
+  };
+
+  # Test nested attribute path syntax
+  exports."test nested attribute path syntax works" = {
+    expr =
+      let
+        collected = collectExports testPath;
+        # bluetooth.nix uses __exports.nixos.role.desktop.services (nested)
+        # instead of __exports."nixos.role.desktop.services" (string key)
+        hasServices = collected ? "nixos.role.desktop.services";
+      in
+      hasServices;
+    expected = true;
+  };
+
+  exports."test nested syntax merges with flat syntax" = {
+    expr =
+      let
+        collected = collectExports testPath;
+        sinks = buildExportSinks {
+          inherit lib collected;
+          enableDebug = true;
+        };
+        services = sinks.nixos.role.desktop.services.__module;
+        # Should have pipewire (flat syntax) and bluetooth (nested syntax)
+        hasBoth = services ? pipewire && services ? bluetooth;
+      in
+      hasBoth;
     expected = true;
   };
 }
