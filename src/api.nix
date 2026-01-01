@@ -513,4 +513,53 @@ in
         visualizeLib = import ./visualize { inherit (updated) lib; };
       in
       analyzeLib // visualizeLib;
+
+  /**
+    Collect fragments from a `.d` directory. Requires `.withLib`.
+
+    Follows the `.d` convention where fragments are sorted by filename
+    and composed together. Supports strings, lists, and attrsets.
+
+    # Example
+
+    ```nix
+    # shellHook.d/ contains 00-base.sh, 10-lintfra.sh, 20-rust.sh
+    shellHook = (imp.withLib lib).fragments ./shellHook.d;
+
+    # packages.d/ contains base.nix, lintfra.nix (each returns a list)
+    packages = (imp.withLib lib).fragmentList ./packages.d;
+
+    # With arguments passed to each .nix fragment
+    shellHook = (imp.withLib lib).fragmentsWith { inherit pkgs; } ./shellHook.d;
+    ```
+
+    # Arguments
+
+    dir
+    : Directory ending in `.d` containing fragments.
+  */
+  fragments =
+    dir:
+    if updated.lib == null then
+      throw "You need to call withLib before using fragments."
+    else
+      (import ./fragments.nix { inherit (updated) lib; }).collectFragments dir;
+
+  /**
+    Collect fragments with arguments passed to each .nix file.
+
+    # Arguments
+
+    args
+    : Attrset of arguments to pass to each fragment function.
+
+    dir
+    : Directory containing fragments.
+  */
+  fragmentsWith =
+    args: dir:
+    if updated.lib == null then
+      throw "You need to call withLib before using fragmentsWith."
+    else
+      (import ./fragments.nix { inherit (updated) lib; }).collectFragmentsWith args dir;
 }
