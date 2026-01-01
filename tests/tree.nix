@@ -77,36 +77,63 @@ in
     };
   };
 
-  tree."test .d directories are excluded from tree" = {
-    # shellHook.d/ exists but should not appear in tree output
-    # (fragment directories are for imp.fragments, not tree building)
-    expr = lit.tree ./fixtures/tree-test;
+  tree."test .d directories merge nix files as attrsets" = {
+    expr = lit.tree ./fixtures/tree-d-test;
     expected = {
-      default = {
-        isDefault = true;
-      };
-      top = {
-        level = "top";
+      apps = {
+        myApp = {
+          type = "app";
+        };
       };
       packages = {
-        foo = {
-          name = "foo";
+        default = {
+          name = "default-pkg";
         };
-        bar = {
-          name = "bar";
+        # core is recursively merged: base + override
+        core = {
+          name = "core-pkg";
+          version = "2.0";
         };
-      };
-      modules = {
-        simple = {
-          value = "simple";
-        };
-        nested = {
-          deep = {
-            value = "deep";
-          };
+        extra = {
+          name = "extra-pkg";
         };
       };
     };
+  };
+
+  tree."test .d directories process files in sorted order" = {
+    # 10-extras.nix comes after 00-core.nix, so its values take precedence
+    expr = (lit.tree ./fixtures/tree-d-test).packages.core;
+    expected = {
+      name = "core-pkg"; # from 00-core
+      version = "2.0"; # from 10-extras (recursiveUpdate adds this)
+    };
+  };
+
+  tree."test .d and .nix with same name is an error" = {
+    expr = lit.tree ./fixtures/tree-conflict-test;
+    expectedError.type = "ThrownError";
+  };
+
+  tree."test .d directories work with mapTree (functions)" = {
+    expr = (lit.mapTree (f: f { prefix = "test"; })).tree ./fixtures/tree-d-functor;
+    expected = {
+      packages = {
+        default = {
+          name = "test-default";
+        };
+        extra = {
+          name = "test-extra";
+        };
+      };
+    };
+  };
+
+  tree."test .d with only shell files is skipped" = {
+    # shellHook.d/ contains .sh files, not .nix - should be skipped entirely
+    # (shell files are handled by imp.fragments for string concatenation)
+    expr = (lit.tree ./fixtures/tree-test) ? shellHook;
+    expected = false; # shellHook.d should not create a shellHook attr (no .nix files)
   };
 
   # mapTree tests

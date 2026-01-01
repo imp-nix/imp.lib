@@ -15,6 +15,7 @@ outputs/
 ```
 
 **Naming rules:**
+
 - `foo.nix` or `foo/default.nix` -> `{ foo = ... }`
 - `foo_.nix` -> `{ foo = ... }` (trailing underscore escapes reserved names)
 - `_foo.nix` or `_foo/` -> ignored (underscore prefix)

@@ -4,7 +4,17 @@
   Naming:  `foo.nix` | `foo/default.nix` -> `{ foo = ... }`
            `foo_.nix`                  -> `{ foo = ... }`  (escapes reserved names)
            `_foo.nix` | `_foo/`          -> ignored
-           `foo.d/`                      -> ignored (fragment directories)
+           `foo.d/`                      -> fragment directory (merged attrsets)
+
+  Fragment directories (`*.d/`):
+    Files in `foo.d/` are imported, called with treef, and merged using
+    `lib.recursiveUpdate`. Files are processed in sorted order (00-base.nix
+    before 10-extra.nix). This enables composable configuration where
+    multiple sources can contribute to a single output attribute.
+
+  Conflict detection:
+    If both `foo.nix` and `foo.d/` exist, an error is thrown. Choose one
+    pattern or the other, not both.
 
   # Example
 
@@ -14,9 +24,9 @@
   outputs/
     apps.nix
     checks.nix
-    packages/
-      foo.nix
-      bar.nix
+    packages.d/
+      00-core.nix       # { default = ...; foo = ...; }
+      10-extras.nix     # { bar = ...; }
   ```
 
   ```nix
@@ -29,10 +39,7 @@
   {
     apps = <imported from apps.nix>;
     checks = <imported from checks.nix>;
-    packages = {
-      foo = <imported from foo.nix>;
-      bar = <imported from bar.nix>;
-    };
+    packages = { default = ...; foo = ...; bar = ...; };  # merged
   }
   ```
 
@@ -63,30 +70,103 @@ let
       toAttrName =
         name:
         let
+          # Remove .nix suffix
           withoutNix = lib.removeSuffix ".nix" name;
+          # Remove .d suffix for fragment directories
+          withoutD = lib.removeSuffix ".d" withoutNix;
         in
-        lib.removeSuffix "_" withoutNix;
+        lib.removeSuffix "_" withoutD;
 
-      # Skip underscore-prefixed entries and .d fragment directories
-      shouldInclude =
+      # Check if a .d directory has a conflicting .nix file
+      hasConflict =
         name:
-        !(lib.hasPrefix "_" name)
-        && !(lib.hasSuffix ".d" name)
-        && filterf (toString root + "/" + name);
+        let
+          baseName = lib.removeSuffix ".d" name;
+          nixFile = baseName + ".nix";
+        in
+        lib.hasSuffix ".d" name && entries ? ${nixFile};
+
+      # Skip underscore-prefixed entries
+      shouldInclude =
+        name: !(lib.hasPrefix "_" name) && filterf (toString root + "/" + name) && !hasConflict name;
+
+      # Check if a .d directory has valid .nix fragments
+      hasValidFragments =
+        path:
+        let
+          fragEntries = builtins.readDir path;
+          fragNames = builtins.attrNames fragEntries;
+        in
+        builtins.any (
+          name:
+          let
+            type = fragEntries.${name};
+          in
+          if type == "regular" then
+            lib.hasSuffix ".nix" name && !(lib.hasPrefix "_" name)
+          else if type == "directory" then
+            builtins.pathExists (path + "/${name}/default.nix") && !(lib.hasPrefix "_" name)
+          else
+            false
+        ) fragNames;
+
+      # Process a .d fragment directory: import all .nix files and merge as attrsets
+      processFragmentDir =
+        path:
+        let
+          fragEntries = builtins.readDir path;
+          fragNames = lib.sort (a: b: a < b) (builtins.attrNames fragEntries);
+
+          isValidFragment =
+            name:
+            let
+              type = fragEntries.${name};
+            in
+            if type == "regular" then
+              lib.hasSuffix ".nix" name && !(lib.hasPrefix "_" name)
+            else if type == "directory" then
+              builtins.pathExists (path + "/${name}/default.nix") && !(lib.hasPrefix "_" name)
+            else
+              false;
+
+          validNames = builtins.filter isValidFragment fragNames;
+
+          loadFragment =
+            name:
+            let
+              fragPath = path + "/${name}";
+            in
+            treef fragPath;
+
+          fragments = map loadFragment validNames;
+        in
+        lib.foldl' lib.recursiveUpdate { } fragments;
 
       processEntry =
         name: type:
         let
           path = root + "/${name}";
           attrName = toAttrName name;
+          isFragmentDir = lib.hasSuffix ".d" name;
         in
         if type == "regular" && lib.hasSuffix ".nix" name then
-          { ${attrName} = treef path; }
-        else if type == "directory" then
           let
-            hasDefault = builtins.pathExists (path + "/default.nix");
+            # Check for conflicting .d directory
+            dDir = (lib.removeSuffix ".nix" name) + ".d";
           in
-          if hasDefault then { ${attrName} = treef path; } else { ${attrName} = buildTree path; }
+          if entries ? ${dDir} then
+            throw "imp.tree: conflict at ${toString root} - both ${name} and ${dDir} exist. Use one or the other."
+          else
+            { ${attrName} = treef path; }
+        else if type == "directory" then
+          if isFragmentDir then
+            # Only include .d directories that have valid .nix fragments
+            if hasValidFragments path then { ${attrName} = processFragmentDir path; } else { }
+          else
+            let
+              hasDefault = builtins.pathExists (path + "/default.nix");
+            in
+            if hasDefault then { ${attrName} = treef path; } else { ${attrName} = buildTree path; }
         else
           { };
 

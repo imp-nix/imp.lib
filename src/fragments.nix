@@ -93,10 +93,7 @@ let
           let
             path = dir + "/${name}";
           in
-          if lib.hasSuffix ".sh" name then
-            builtins.readFile path
-          else
-            import path;
+          if lib.hasSuffix ".sh" name then builtins.readFile path else import path;
 
         fragments = map loadFragment validNames;
       in
@@ -135,43 +132,43 @@ let
         entries = builtins.readDir dir;
         sortedNames = lib.sort (a: b: a < b) (builtins.attrNames entries);
 
-      isValidFragment =
-        name:
-        let
-          type = entries.${name};
-        in
-        if type == "regular" then
-          lib.hasSuffix ".nix" name || lib.hasSuffix ".sh" name
-        else if type == "directory" then
-          builtins.pathExists (dir + "/${name}/default.nix")
-        else
-          false;
+        isValidFragment =
+          name:
+          let
+            type = entries.${name};
+          in
+          if type == "regular" then
+            lib.hasSuffix ".nix" name || lib.hasSuffix ".sh" name
+          else if type == "directory" then
+            builtins.pathExists (dir + "/${name}/default.nix")
+          else
+            false;
 
-      validNames = builtins.filter isValidFragment sortedNames;
+        validNames = builtins.filter isValidFragment sortedNames;
 
-      loadFragment =
-        name:
-        let
-          path = dir + "/${name}";
-          imported = import path;
-        in
-        if lib.hasSuffix ".sh" name then
-          builtins.readFile path
-        else if builtins.isFunction imported then
-          imported args
-        else
-          imported;
+        loadFragment =
+          name:
+          let
+            path = dir + "/${name}";
+            imported = import path;
+          in
+          if lib.hasSuffix ".sh" name then
+            builtins.readFile path
+          else if builtins.isFunction imported then
+            imported args
+          else
+            imported;
 
-      fragments = map loadFragment validNames;
-    in
-    {
-      list = fragments;
-      asString = lib.concatStringsSep "\n" (
-        map (f: if builtins.isString f then f else builtins.toString f) fragments
-      );
-      asList = lib.flatten fragments;
-      asAttrs = lib.foldl' (acc: f: acc // f) { } (builtins.filter builtins.isAttrs fragments);
-    };
+        fragments = map loadFragment validNames;
+      in
+      {
+        list = fragments;
+        asString = lib.concatStringsSep "\n" (
+          map (f: if builtins.isString f then f else builtins.toString f) fragments
+        );
+        asList = lib.flatten fragments;
+        asAttrs = lib.foldl' (acc: f: acc // f) { } (builtins.filter builtins.isAttrs fragments);
+      };
 
 in
 {
