@@ -57,11 +57,21 @@ let
     - `asString`: Fragments concatenated with newlines
     - `asList`: Fragments flattened (for lists of lists)
     - `asAttrs`: Fragments merged (for attrsets)
+
+    Returns empty results if directory doesn't exist.
   */
   collectFragments =
     dir:
-    let
-      entries = builtins.readDir dir;
+    if !builtins.pathExists dir then
+      {
+        list = [ ];
+        asString = "";
+        asList = [ ];
+        asAttrs = { };
+      }
+    else
+      let
+        entries = builtins.readDir dir;
 
       # Sort by filename for deterministic ordering
       sortedNames = lib.sort (a: b: a < b) (builtins.attrNames entries);
@@ -138,9 +148,17 @@ let
   */
   collectFragmentsWith =
     args: dir:
-    let
-      entries = builtins.readDir dir;
-      sortedNames = lib.sort (a: b: a < b) (builtins.attrNames entries);
+    if !builtins.pathExists dir then
+      {
+        list = [ ];
+        asString = "";
+        asList = [ ];
+        asAttrs = { };
+      }
+    else
+      let
+        entries = builtins.readDir dir;
+        sortedNames = lib.sort (a: b: a < b) (builtins.attrNames entries);
 
       isValidFragment =
         name:
