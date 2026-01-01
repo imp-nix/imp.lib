@@ -348,6 +348,71 @@ html = (imp.withLib lib).analyze.toHtml graph
 json = (imp.withLib lib).analyze.toJson graph
 ```
 
+## `imp.fragments` {#imp.fragments}
+
+Collect fragments from a `.d` directory. Requires `.withLib`.
+
+Follows the `.d` convention where fragments are sorted by filename
+and composed together. Files are processed in order (00-base before 10-extra).
+
+Returns an attrset with multiple access methods:
+
+- `.list` - raw list of fragment contents
+- `.asString` - fragments concatenated with newlines (for shell scripts)
+- `.asList` - fragments flattened (for lists of packages)
+- `.asAttrs` - fragments merged (for attrsets)
+
+Note: For known flake output directories (packages.d, devShells.d, etc.),
+tree.nix auto-merges fragments. Use `imp.fragments` for other `.d` dirs
+like shellHook.d or shell-packages.d.
+
+### Example
+
+```nix
+let
+  imp = inputs.imp.withLib lib;
+
+  # Shell scripts concatenated
+  shellHookFragments = imp.fragments ./shellHook.d;
+
+  # Package lists merged
+  shellPkgFragments = imp.fragmentsWith { inherit pkgs self'; } ./shell-packages.d;
+in
+pkgs.mkShell {
+  packages = shellPkgFragments.asList;
+  shellHook = shellHookFragments.asString;
+}
+```
+
+### Arguments
+
+dir
+: Directory ending in `.d` containing fragments (.nix or .sh files).
+
+## `imp.fragmentsWith` {#imp.fragmentsWith}
+
+Collect fragments with arguments passed to each .nix file.
+
+Like `fragments`, but calls each .nix fragment as a function with the
+provided arguments. Shell (.sh) files are still read as strings.
+
+### Example
+
+```nix
+# Each file in shell-packages.d/ is called with { pkgs, self' }
+# and should return a list like [ pkgs.ast-grep self'.packages.lint ]
+shellPkgs = (imp.withLib lib).fragmentsWith { inherit pkgs self'; } ./shell-packages.d;
+packages = shellPkgs.asList;
+```
+
+### Arguments
+
+args
+: Attrset of arguments to pass to each fragment function.
+
+dir
+: Directory containing fragments.
+
 ## Registry
 
 ## `imp.buildRegistry` {#imp.buildRegistry}

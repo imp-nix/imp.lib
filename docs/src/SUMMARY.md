@@ -5,6 +5,7 @@
 - [Concepts](<>)
   - [Directory-Based Imports](./concepts/directory-imports.md)
   - [Naming Conventions](./concepts/naming-conventions.md)
+  - [Fragment Directories](./concepts/fragment-directories.md)
   - [The Registry](./concepts/registry.md)
   - [Export Sinks](./concepts/exports.md)
   - [Host Declarations](./concepts/hosts.md)

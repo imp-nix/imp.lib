@@ -25,6 +25,7 @@ Methods are organized into categories:
 - Filtering: `filter`, `filterNot`, `match`, `matchNot`, `initFilter`
 - Transforming: `map`, `mapTree`
 - Tree building: `tree`, `treeWith`, `configTree`, `configTreeWith`
+- Fragments: `fragments`, `fragmentsWith`
 - File lists: `leafs`, `files`, `pipeTo`
 - Extending: `addPath`, `addAPI`, `withLib`, `new`
 
@@ -51,6 +52,22 @@ Builds nested attrset from directory structure.
 Naming: `foo.nix` | `foo/default.nix` -> `{ foo = ... }`
 `foo_.nix` -> `{ foo = ... }` (escapes reserved names)
 `_foo.nix` | `_foo/` -> ignored
+`foo.d/` -> fragment directory (merged attrsets)
+
+Fragment directories (`*.d/`):
+Only `.d` directories matching known flake output names are auto-merged:
+packages, devShells, checks, apps, overlays, nixosModules, homeModules,
+nixosConfigurations, darwinConfigurations, legacyPackages.
+
+Other `.d` directories (e.g., shellHook.d, shell-packages.d) are ignored
+by tree and should be consumed via `imp.fragments` or `imp.fragmentsWith`.
+
+Merged directories have their `.nix` files imported in sorted order
+(00-base.nix before 10-extra.nix) and combined with `lib.recursiveUpdate`.
+
+Conflict detection:
+If both `foo.nix` and `foo.d/` exist, an error is thrown. Choose one
+pattern or the other, not both.
 
 #### Example
 
@@ -60,9 +77,9 @@ Directory structure:
 outputs/
   apps.nix
   checks.nix
-  packages/
-    foo.nix
-    bar.nix
+  packages.d/
+    00-core.nix       # { default = ...; foo = ...; }
+    10-extras.nix     # { bar = ...; }
 ```
 
 ```nix
@@ -75,10 +92,7 @@ Returns:
 {
   apps = <imported from apps.nix>;
   checks = <imported from checks.nix>;
-  packages = {
-    foo = <imported from foo.nix>;
-    bar = <imported from bar.nix>;
-  };
+  packages = { default = ...; foo = ...; bar = ...; };  # merged
 }
 ```
 

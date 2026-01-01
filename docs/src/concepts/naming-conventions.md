@@ -2,12 +2,13 @@
 
 imp translates filesystem paths to Nix attributes. The rules are simple but worth knowing.
 
-| Path              | Attribute   | Notes                      |
-| ----------------- | ----------- | -------------------------- |
-| `foo.nix`         | `foo`       | File becomes attribute     |
-| `foo/default.nix` | `foo`       | Directory with default.nix |
-| `foo_.nix`        | `foo`       | Trailing `_` is stripped   |
-| `_foo.nix`        | _(ignored)_ | Leading `_` hides files    |
+| Path              | Attribute   | Notes                          |
+| ----------------- | ----------- | ------------------------------ |
+| `foo.nix`         | `foo`       | File becomes attribute         |
+| `foo/default.nix` | `foo`       | Directory with default.nix     |
+| `foo_.nix`        | `foo`       | Trailing `_` is stripped       |
+| `_foo.nix`        | _(ignored)_ | Leading `_` hides files        |
+| `foo.d/`          | `foo`       | Fragment directory (see below) |
 
 ## Directory modules
 
@@ -32,3 +33,9 @@ registry.modules.nixos.base     # Path to base.nix
 ```
 
 When you pass an attrset to `imp`, it checks for `__path` and imports from that directory: `(imp registry.modules.nixos)` recursively imports everything under `registry/modules/nixos/`.
+
+## Fragment directories
+
+Directories ending in `.d` follow the Unix convention (like `conf.d`, `init.d`). For known flake output names (`packages.d/`, `devShells.d/`, etc.), files inside are merged into a single attrset. Other `.d` directories are ignored by tree and consumed via `imp.fragments`.
+
+See [Fragment Directories](./fragment-directories.md) for details.

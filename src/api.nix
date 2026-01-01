@@ -7,6 +7,7 @@
   - Filtering: `filter`, `filterNot`, `match`, `matchNot`, `initFilter`
   - Transforming: `map`, `mapTree`
   - Tree building: `tree`, `treeWith`, `configTree`, `configTreeWith`
+  - Fragments: `fragments`, `fragmentsWith`
   - File lists: `leafs`, `files`, `pipeTo`
   - Extending: `addPath`, `addAPI`, `withLib`, `new`
 */
@@ -517,25 +518,40 @@ in
     Collect fragments from a `.d` directory. Requires `.withLib`.
 
     Follows the `.d` convention where fragments are sorted by filename
-    and composed together. Supports strings, lists, and attrsets.
+    and composed together. Files are processed in order (00-base before 10-extra).
+
+    Returns an attrset with multiple access methods:
+    - `.list` - raw list of fragment contents
+    - `.asString` - fragments concatenated with newlines (for shell scripts)
+    - `.asList` - fragments flattened (for lists of packages)
+    - `.asAttrs` - fragments merged (for attrsets)
+
+    Note: For known flake output directories (packages.d, devShells.d, etc.),
+    tree.nix auto-merges fragments. Use `imp.fragments` for other `.d` dirs
+    like shellHook.d or shell-packages.d.
 
     # Example
 
     ```nix
-    # shellHook.d/ contains 00-base.sh, 10-lintfra.sh, 20-rust.sh
-    shellHook = (imp.withLib lib).fragments ./shellHook.d;
+    let
+      imp = inputs.imp.withLib lib;
 
-    # packages.d/ contains base.nix, lintfra.nix (each returns a list)
-    packages = (imp.withLib lib).fragmentList ./packages.d;
+      # Shell scripts concatenated
+      shellHookFragments = imp.fragments ./shellHook.d;
 
-    # With arguments passed to each .nix fragment
-    shellHook = (imp.withLib lib).fragmentsWith { inherit pkgs; } ./shellHook.d;
+      # Package lists merged
+      shellPkgFragments = imp.fragmentsWith { inherit pkgs self'; } ./shell-packages.d;
+    in
+    pkgs.mkShell {
+      packages = shellPkgFragments.asList;
+      shellHook = shellHookFragments.asString;
+    }
     ```
 
     # Arguments
 
     dir
-    : Directory ending in `.d` containing fragments.
+    : Directory ending in `.d` containing fragments (.nix or .sh files).
   */
   fragments =
     dir:
@@ -546,6 +562,18 @@ in
 
   /**
     Collect fragments with arguments passed to each .nix file.
+
+    Like `fragments`, but calls each .nix fragment as a function with the
+    provided arguments. Shell (.sh) files are still read as strings.
+
+    # Example
+
+    ```nix
+    # Each file in shell-packages.d/ is called with { pkgs, self' }
+    # and should return a list like [ pkgs.ast-grep self'.packages.lint ]
+    shellPkgs = (imp.withLib lib).fragmentsWith { inherit pkgs self'; } ./shell-packages.d;
+    packages = shellPkgs.asList;
+    ```
 
     # Arguments
 
