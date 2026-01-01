@@ -4,6 +4,7 @@
   Naming:  `foo.nix` | `foo/default.nix` -> `{ foo = ... }`
            `foo_.nix`                  -> `{ foo = ... }`  (escapes reserved names)
            `_foo.nix` | `_foo/`          -> ignored
+           `foo.d/`                      -> ignored (fragment directories)
 
   # Example
 
@@ -66,7 +67,12 @@ let
         in
         lib.removeSuffix "_" withoutNix;
 
-      shouldInclude = name: !(lib.hasPrefix "_" name) && filterf (toString root + "/" + name);
+      # Skip underscore-prefixed entries and .d fragment directories
+      shouldInclude =
+        name:
+        !(lib.hasPrefix "_" name)
+        && !(lib.hasSuffix ".d" name)
+        && filterf (toString root + "/" + name);
 
       processEntry =
         name: type:

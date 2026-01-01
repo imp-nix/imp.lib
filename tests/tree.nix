@@ -77,6 +77,38 @@ in
     };
   };
 
+  tree."test .d directories are excluded from tree" = {
+    # shellHook.d/ exists but should not appear in tree output
+    # (fragment directories are for imp.fragments, not tree building)
+    expr = lit.tree ./fixtures/tree-test;
+    expected = {
+      default = {
+        isDefault = true;
+      };
+      top = {
+        level = "top";
+      };
+      packages = {
+        foo = {
+          name = "foo";
+        };
+        bar = {
+          name = "bar";
+        };
+      };
+      modules = {
+        simple = {
+          value = "simple";
+        };
+        nested = {
+          deep = {
+            value = "deep";
+          };
+        };
+      };
+    };
+  };
+
   # mapTree tests
   mapTree."test transforms imported values" = {
     expr = (lit.mapTree (x: x // { extra = true; })).tree ./fixtures/tree-test/packages;
