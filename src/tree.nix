@@ -7,10 +7,15 @@
            `foo.d/`                      -> fragment directory (merged attrsets)
 
   Fragment directories (`*.d/`):
-    Files in `foo.d/` are imported, called with treef, and merged using
-    `lib.recursiveUpdate`. Files are processed in sorted order (00-base.nix
-    before 10-extra.nix). This enables composable configuration where
-    multiple sources can contribute to a single output attribute.
+    Only `.d` directories matching known flake output names are auto-merged:
+    packages, devShells, checks, apps, overlays, nixosModules, homeModules,
+    nixosConfigurations, darwinConfigurations, legacyPackages.
+
+    Other `.d` directories (e.g., shellHook.d, shell-packages.d) are ignored
+    by tree and should be consumed via `imp.fragments` or `imp.fragmentsWith`.
+
+    Merged directories have their `.nix` files imported in sorted order
+    (00-base.nix before 10-extra.nix) and combined with `lib.recursiveUpdate`.
 
   Conflict detection:
     If both `foo.nix` and `foo.d/` exist, an error is thrown. Choose one
@@ -62,6 +67,23 @@
   filterf,
 }:
 let
+  # Flake output names that should be auto-merged when using .d pattern
+  mergeableOutputs = [
+    "packages"
+    "devShells"
+    "checks"
+    "apps"
+    "overlays"
+    "nixosModules"
+    "homeModules"
+    "darwinModules"
+    "flakeModules"
+    "nixosConfigurations"
+    "darwinConfigurations"
+    "homeConfigurations"
+    "legacyPackages"
+  ];
+
   buildTree =
     root:
     let
@@ -70,12 +92,18 @@ let
       toAttrName =
         name:
         let
-          # Remove .nix suffix
           withoutNix = lib.removeSuffix ".nix" name;
-          # Remove .d suffix for fragment directories
           withoutD = lib.removeSuffix ".d" withoutNix;
         in
         lib.removeSuffix "_" withoutD;
+
+      # Check if a .d directory should be auto-merged
+      isMergeableFragmentDir =
+        name:
+        let
+          baseName = lib.removeSuffix ".d" name;
+        in
+        lib.hasSuffix ".d" name && builtins.elem baseName mergeableOutputs;
 
       # Check if a .d directory has a conflicting .nix file
       hasConflict =
@@ -86,9 +114,12 @@ let
         in
         lib.hasSuffix ".d" name && entries ? ${nixFile};
 
-      # Skip underscore-prefixed entries
       shouldInclude =
-        name: !(lib.hasPrefix "_" name) && filterf (toString root + "/" + name) && !hasConflict name;
+        name:
+        !(lib.hasPrefix "_" name)
+        && filterf (toString root + "/" + name)
+        && !hasConflict name
+        && !(lib.hasSuffix ".d" name && !isMergeableFragmentDir name);
 
       # Check if a .d directory has valid .nix fragments
       hasValidFragments =
