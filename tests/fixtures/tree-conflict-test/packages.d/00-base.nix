@@ -1,2 +1,2 @@
-# This conflicts with packages.nix
-{ bar = 2; }
+# Fragment packages - merged with packages.nix
+{ fromFragment = { name = "fragment-pkg"; }; }

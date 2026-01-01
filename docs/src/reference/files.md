@@ -59,15 +59,17 @@ Only `.d` directories matching known flake output names are auto-merged:
 packages, devShells, checks, apps, overlays, nixosModules, homeModules,
 nixosConfigurations, darwinConfigurations, legacyPackages.
 
-Other `.d` directories (e.g., shellHook.d, shell-packages.d) are ignored
-by tree and should be consumed via `imp.fragments` or `imp.fragmentsWith`.
+Other `.d` directories (e.g., shellHook.d) are ignored by tree and should
+be consumed via `imp.fragments` or `imp.fragmentsWith`.
 
 Merged directories have their `.nix` files imported in sorted order
 (00-base.nix before 10-extra.nix) and combined with `lib.recursiveUpdate`.
 
-Conflict detection:
-If both `foo.nix` and `foo.d/` exist, an error is thrown. Choose one
-pattern or the other, not both.
+Merging with base file:
+If both `foo.nix` and `foo.d/` exist for a mergeable output, they are
+combined: `foo.nix` is imported first, then `foo.d/*.nix` fragments are
+merged on top using `lib.recursiveUpdate`. This allows a base file to
+define core outputs while fragments add or extend them.
 
 #### Example
 

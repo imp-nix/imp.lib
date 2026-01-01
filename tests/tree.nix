@@ -110,9 +110,15 @@ in
     };
   };
 
-  tree."test .d and .nix with same name is an error" = {
+  tree."test .d and .nix with same name are merged" = {
+    # packages.nix provides base, packages.d/ adds more - they should merge
     expr = lit.tree ./fixtures/tree-conflict-test;
-    expectedError.type = "ThrownError";
+    expected = {
+      packages = {
+        fromBase = { name = "base-pkg"; };
+        fromFragment = { name = "fragment-pkg"; };
+      };
+    };
   };
 
   tree."test .d directories work with mapTree (functions)" = {

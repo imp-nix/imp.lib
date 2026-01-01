@@ -1,2 +1,2 @@
-# This conflicts with packages.d/
-{ foo = 1; }
+# Base packages - merged with packages.d/
+{ fromBase = { name = "base-pkg"; }; }

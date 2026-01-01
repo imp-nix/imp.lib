@@ -11,15 +11,17 @@
     packages, devShells, checks, apps, overlays, nixosModules, homeModules,
     nixosConfigurations, darwinConfigurations, legacyPackages.
 
-    Other `.d` directories (e.g., shellHook.d, shell-packages.d) are ignored
-    by tree and should be consumed via `imp.fragments` or `imp.fragmentsWith`.
+    Other `.d` directories (e.g., shellHook.d) are ignored by tree and should
+    be consumed via `imp.fragments` or `imp.fragmentsWith`.
 
     Merged directories have their `.nix` files imported in sorted order
     (00-base.nix before 10-extra.nix) and combined with `lib.recursiveUpdate`.
 
-  Conflict detection:
-    If both `foo.nix` and `foo.d/` exist, an error is thrown. Choose one
-    pattern or the other, not both.
+  Merging with base file:
+    If both `foo.nix` and `foo.d/` exist for a mergeable output, they are
+    combined: `foo.nix` is imported first, then `foo.d/*.nix` fragments are
+    merged on top using `lib.recursiveUpdate`. This allows a base file to
+    define core outputs while fragments add or extend them.
 
   # Example
 
@@ -105,20 +107,10 @@ let
         in
         lib.hasSuffix ".d" name && builtins.elem baseName mergeableOutputs;
 
-      # Check if a .d directory has a conflicting .nix file
-      hasConflict =
-        name:
-        let
-          baseName = lib.removeSuffix ".d" name;
-          nixFile = baseName + ".nix";
-        in
-        lib.hasSuffix ".d" name && entries ? ${nixFile};
-
       shouldInclude =
         name:
         !(lib.hasPrefix "_" name)
         && filterf (toString root + "/" + name)
-        && !hasConflict name
         && !(lib.hasSuffix ".d" name && !isMergeableFragmentDir name);
 
       # Check if a .d directory has valid .nix fragments
@@ -182,17 +174,32 @@ let
         in
         if type == "regular" && lib.hasSuffix ".nix" name then
           let
-            # Check for conflicting .d directory
+            # Check for companion .d directory to merge with
             dDir = (lib.removeSuffix ".nix" name) + ".d";
+            dDirPath = root + "/${dDir}";
+            baseValue = treef path;
           in
-          if entries ? ${dDir} then
-            throw "imp.tree: conflict at ${toString root} - both ${name} and ${dDir} exist. Use one or the other."
+          if entries ? ${dDir} && isMergeableFragmentDir dDir then
+            # Merge foo.nix with foo.d/*.nix fragments
+            let
+              fragmentValue = processFragmentDir dDirPath;
+            in
+            { ${attrName} = lib.recursiveUpdate baseValue fragmentValue; }
           else
-            { ${attrName} = treef path; }
+            { ${attrName} = baseValue; }
         else if type == "directory" then
           if isFragmentDir then
-            # Only include .d directories that have valid .nix fragments
-            if hasValidFragments path then { ${attrName} = processFragmentDir path; } else { }
+            # Skip .d directories here if they have a companion .nix file (handled above)
+            let
+              baseName = lib.removeSuffix ".d" name;
+              nixFile = baseName + ".nix";
+            in
+            if entries ? ${nixFile} then
+              { } # Already handled when processing the .nix file
+            else if hasValidFragments path then
+              { ${attrName} = processFragmentDir path; }
+            else
+              { }
           else
             let
               hasDefault = builtins.pathExists (path + "/default.nix");

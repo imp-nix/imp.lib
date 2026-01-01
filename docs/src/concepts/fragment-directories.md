@@ -49,11 +49,9 @@ Other `.d` directories are ignored by tree and consumed via `imp.fragments`:
 { pkgs, imp, ... }:
 let
   shellHookFragments = imp.fragments ./shellHook.d;
-  shellPackages = imp.fragmentsWith { inherit pkgs; } ./shell-packages.d;
 in
 {
   default = pkgs.mkShell {
-    packages = shellPackages.asList;
     shellHook = shellHookFragments.asString;
   };
 }
@@ -61,22 +59,29 @@ in
 
 Common patterns:
 
-| Directory           | Content               | Collection method                |
-| ------------------- | --------------------- | -------------------------------- |
-| `shellHook.d/`      | Shell scripts (`.sh`) | `imp.fragments` → `.asString`    |
-| `shell-packages.d/` | Package lists         | `imp.fragmentsWith` → `.asList`  |
-| `env.d/`            | Environment attrsets  | `imp.fragmentsWith` → `.asAttrs` |
+| Directory      | Content               | Collection method             |
+| -------------- | --------------------- | ----------------------------- |
+| `shellHook.d/` | Shell scripts (`.sh`) | `imp.fragments` → `.asString` |
+| `env.d/`       | Environment attrsets  | `imp.fragmentsWith` → `.asAttrs` |
 
-## Conflict detection
+## Merging base files with fragments
 
-If both `foo.nix` and `foo.d/` exist at the same level, imp throws an error. Choose one pattern or the other:
+When both `foo.nix` and `foo.d/` exist for a mergeable output, they are combined:
 
 ```
 outputs/
-  packages.nix      # ERROR: conflicts with packages.d/
+  packages.nix        # { default = myPkg; }
   packages.d/
-    00-core.nix
+    10-extras.nix     # { bar = barPkg; }
 ```
+
+Result:
+
+```nix
+self'.packages = { default = myPkg; bar = barPkg; }
+```
+
+The base file (`foo.nix`) is imported first, then fragments from `foo.d/` are merged on top using `lib.recursiveUpdate`. This allows a base file to define core outputs while fragments extend them.
 
 ## Fragment file structure
 
@@ -104,12 +109,26 @@ The `.d` pattern shines when external tools add files to your project. For examp
 ```
 outputs/perSystem/
   packages.d/
-    00-rust.nix       # Your rust packages
-    10-lint.nix       # Injected by lintfra
-  shell-packages.d/
-    10-lintfra.nix    # Injected by lintfra
-  shellHook.d/
-    10-lintfra.sh     # Injected by lintfra
+    00-rust.nix         # Your rust packages
+    10-lint.nix         # Injected by lintfra
+  devShells.nix         # Your main devShell using inputsFrom
+  devShells.d/
+    10-lintfra.nix      # Injected lintfra devShell
 ```
 
-Your `00-rust.nix` defines the main packages. The injected `10-lint.nix` adds a lint command. Both are merged into `self'.packages` without any manual wiring.
+Your `packages.d/00-rust.nix` defines the main packages. The injected `10-lint.nix` adds a lint command. Both are merged into `self'.packages` without any manual wiring.
+
+For devShells, the injected `devShells.d/10-lintfra.nix` provides a composable shell that your `devShells.nix` can consume via `inputsFrom`:
+
+```nix
+# devShells.nix
+{ pkgs, self', ... }:
+{
+  default = pkgs.mkShell {
+    inputsFrom = [ self'.devShells.lintfra ];  # from devShells.d/
+    packages = [ /* your packages */ ];
+  };
+}
+```
+
+This uses the standard Nix `inputsFrom` pattern for shell composition.

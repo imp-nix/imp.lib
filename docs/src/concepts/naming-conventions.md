@@ -36,6 +36,8 @@ When you pass an attrset to `imp`, it checks for `__path` and imports from that 
 
 ## Fragment directories
 
-Directories ending in `.d` follow the Unix convention (like `conf.d`, `init.d`). For known flake output names (`packages.d/`, `devShells.d/`, etc.), files inside are merged into a single attrset. Other `.d` directories are ignored by tree and consumed via `imp.fragments`.
+Directories ending in `.d` follow the Unix convention (like `conf.d`, `init.d`). For known flake output names (`packages.d/`, `devShells.d/`, etc.), files inside are merged into a single attrset. If both `foo.nix` and `foo.d/` exist, they are merged together (base file first, then fragments on top).
+
+Other `.d` directories are ignored by tree and consumed via `imp.fragments`.
 
 See [Fragment Directories](./fragment-directories.md) for details.
