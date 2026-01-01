@@ -1,4 +1,6 @@
-# Tests for imp.imports: registry wrapper extraction and module processing
+/**
+  Tests for imp.imports.
+*/
 {
   lib,
   imp,

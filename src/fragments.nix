@@ -72,67 +72,42 @@ let
     else
       let
         entries = builtins.readDir dir;
+        sortedNames = lib.sort (a: b: a < b) (builtins.attrNames entries);
 
-      # Sort by filename for deterministic ordering
-      sortedNames = lib.sort (a: b: a < b) (builtins.attrNames entries);
+        isValidFragment =
+          name:
+          let
+            type = entries.${name};
+          in
+          if type == "regular" then
+            lib.hasSuffix ".nix" name || lib.hasSuffix ".sh" name
+          else if type == "directory" then
+            builtins.pathExists (dir + "/${name}/default.nix")
+          else
+            false;
 
-      # Import each fragment
-      importFragment =
-        name:
-        let
-          path = dir + "/${name}";
-          type = entries.${name};
-        in
-        if type == "regular" then
-          import path
-        else if type == "directory" && builtins.pathExists (path + "/default.nix") then
-          import path
-        else
-          null;
+        validNames = builtins.filter isValidFragment sortedNames;
 
-      # Filter out nulls and non-.nix files for regular files
-      isValidFragment =
-        name:
-        let
-          type = entries.${name};
-        in
-        if type == "regular" then
-          lib.hasSuffix ".nix" name || lib.hasSuffix ".sh" name
-        else if type == "directory" then
-          builtins.pathExists (dir + "/${name}/default.nix")
-        else
-          false;
+        loadFragment =
+          name:
+          let
+            path = dir + "/${name}";
+          in
+          if lib.hasSuffix ".sh" name then
+            builtins.readFile path
+          else
+            import path;
 
-      validNames = builtins.filter isValidFragment sortedNames;
-
-      # For .sh files, read content directly; for .nix, import
-      loadFragment =
-        name:
-        let
-          path = dir + "/${name}";
-        in
-        if lib.hasSuffix ".sh" name then
-          builtins.readFile path
-        else
-          import path;
-
-      fragments = map loadFragment validNames;
-    in
-    {
-      # Raw list of fragments
-      list = fragments;
-
-      # Concatenate as string (for shellHook, etc.)
-      asString = lib.concatStringsSep "\n" (
-        map (f: if builtins.isString f then f else builtins.toString f) fragments
-      );
-
-      # Flatten lists (for packages.d where each file returns a list)
-      asList = lib.flatten fragments;
-
-      # Merge attrsets (for env.d, etc.)
-      asAttrs = lib.foldl' (acc: f: acc // f) { } (builtins.filter builtins.isAttrs fragments);
-    };
+        fragments = map loadFragment validNames;
+      in
+      {
+        list = fragments;
+        asString = lib.concatStringsSep "\n" (
+          map (f: if builtins.isString f then f else builtins.toString f) fragments
+        );
+        asList = lib.flatten fragments;
+        asAttrs = lib.foldl' (acc: f: acc // f) { } (builtins.filter builtins.isAttrs fragments);
+      };
 
   /**
     Collect fragments with arguments passed to each .nix file.

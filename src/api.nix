@@ -238,7 +238,6 @@ in
   */
   leafs = mergeAttrs { pipef = (i: i); };
 
-  # Terminal operations (not documented - internal)
   result = current [ ];
   files = current.leafs.result;
 

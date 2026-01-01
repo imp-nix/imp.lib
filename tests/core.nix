@@ -1,4 +1,6 @@
-# Core API tests: leafs, filter, match, map, addPath, new, initFilter, addAPI, pipeTo
+/**
+  Core API tests.
+*/
 {
   lib,
   imp,

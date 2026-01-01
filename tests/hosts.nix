@@ -1,4 +1,6 @@
-# Tests for host collection and building
+/**
+  Tests for host collection and building.
+*/
 {
   lib,
   imp,

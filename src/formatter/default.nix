@@ -1,18 +1,33 @@
-# Reusable formatter configuration for imp-based flakes
-#
-# Usage:
-#   formatter = imp.formatterLib.make {
-#     inherit pkgs treefmt-nix;
-#     # Optional overrides:
-#     # excludes = [ "vendor/*" ];
-#     # extraFormatters = { ... };
-#     # nixfmt.enable = false;
-#     # mdformat.enable = false;
-#     # rust.enable = true;  # enables rustfmt + cargo-sort
-#   };
+/**
+  Reusable formatter configuration for imp-based flakes.
+
+  # Example
+
+  ```nix
+  formatter = imp.formatterLib.make {
+    inherit pkgs treefmt-nix;
+    rust.enable = true;
+  };
+  ```
+*/
 {
-  # Create a formatter for the given pkgs and treefmt-nix
-  # Returns a derivation suitable for use as `formatter.<system>`
+  /**
+    Create a formatter derivation.
+
+    # Arguments
+
+    - `pkgs`: Nixpkgs instance
+    - `treefmt-nix`: treefmt-nix flake input
+    - `excludes` (optional): Files/directories to exclude
+    - `extraFormatters` (optional): Additional treefmt formatter settings
+    - `nixfmt` (optional): `{ enable = true; }` to enable nixfmt
+    - `mdformat` (optional): `{ enable = true; }` to enable mdformat
+    - `rust` (optional): `{ enable = false; }` to enable rustfmt + cargo-sort
+
+    # Returns
+
+    Derivation suitable for `formatter.<system>`.
+  */
   make =
     {
       pkgs,
@@ -100,8 +115,9 @@
     in
     treefmtEval.config.build.wrapper;
 
-  # Convenience function that returns treefmt eval config
-  # for use cases where you need the full config, not just wrapper
+  /**
+    Like `make` but returns the full treefmt eval config.
+  */
   makeEval =
     {
       pkgs,

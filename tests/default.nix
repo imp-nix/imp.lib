@@ -1,4 +1,6 @@
-# Unit tests for imp
+/**
+  Unit tests for imp.
+*/
 { lib }:
 let
   imp = import ./../src;

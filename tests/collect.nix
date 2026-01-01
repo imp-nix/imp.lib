@@ -1,5 +1,6 @@
-# Tests for collect.nix - file collection and filtering logic
-# These tests focus on edge cases not covered by the core API tests
+/**
+  Tests for collect.nix - file collection and filtering logic.
+*/
 {
   lib,
   imp,

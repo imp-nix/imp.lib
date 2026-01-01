@@ -1,4 +1,6 @@
-# Tests for export collection and sink building
+/**
+  Tests for export collection and sink building.
+*/
 {
   lib,
   imp,

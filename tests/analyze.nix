@@ -1,4 +1,6 @@
-# Tests for analyze module
+/**
+  Tests for analyze module.
+*/
 { lib, imp, ... }:
 let
   analyze = (imp.withLib lib).analyze;

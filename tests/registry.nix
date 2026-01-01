@@ -1,4 +1,6 @@
-# Tests for registry: named module discovery and resolution
+/**
+  Tests for registry.
+*/
 {
   lib,
   imp,

@@ -1,4 +1,6 @@
-# Internal utilities for imp.
+/**
+  Internal utilities for imp.
+*/
 rec {
   compose =
     g: f: x:

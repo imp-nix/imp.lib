@@ -1,7 +1,8 @@
-# Tests for visualize module (JSON formatters only)
-#
-# NOTE: HTML visualization tests are in imp.graph.
-# This module only provides toJson and toJsonMinimal which don't require WASM.
+/**
+  Tests for visualize module (JSON formatters only).
+
+  HTML visualization tests are in imp.graph.
+*/
 { lib, imp, ... }:
 let
   visualize = import ../src/visualize { inherit lib; };

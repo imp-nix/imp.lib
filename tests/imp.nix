@@ -1,4 +1,6 @@
-# Tests for imp as a module system integration
+/**
+  Tests for imp as a module system integration.
+*/
 {
   lib,
   imp,

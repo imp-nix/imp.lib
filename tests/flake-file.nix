@@ -1,4 +1,6 @@
-# Tests for flake file generation: collectInputs, formatInputs, formatFlake, collectAndFormatFlake
+/**
+  Tests for flake file generation.
+*/
 {
   lib,
   imp,

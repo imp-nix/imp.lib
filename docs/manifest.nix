@@ -1,10 +1,11 @@
-# Documentation structure manifest
-# Defines how src/*.nix files are organized into generated docs
+/**
+  Documentation structure manifest.
+
+  Defines how src/*.nix files are organized into generated docs.
+  titleLevel sets the heading level for titles (default: 1).
+  Sections are one level below title, files one level below sections.
+*/
 {
-  # files.md - File reference documentation
-  # titleLevel: heading level for the document title (default: 1)
-  # Sections are one level below title, files one level below sections
-  # Content headings in doc comments are shifted relative to file level
   files = {
     title = "File Reference";
     titleLevel = 1; # H1 for title, H2 for sections, H3 for files, shift by 3 for content
@@ -70,8 +71,6 @@
     ];
   };
 
-  # methods.md - API method documentation
-  # Each entry generates a section with function docs from nixdoc
   methods = {
     title = "API Methods";
     titleLevel = 1; # H1 for title, H2 for section headings

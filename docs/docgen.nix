@@ -1,12 +1,12 @@
-# Documentation generation for imp
-# Configures docgen with imp-specific settings
+/**
+  Documentation generation for imp.
+*/
 {
   pkgs,
   lib,
   docgen,
 }:
 let
-  # Use docgen's helper to convert options module to JSON
   optionsJson = docgen.lib.optionsToJson {
     optionsModule = ../src/options-schema.nix;
     prefix = "imp.";

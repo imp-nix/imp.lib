@@ -1,4 +1,6 @@
-# Tests for tree, mapTree, configTree, configTreeWith
+/**
+  Tests for tree operations.
+*/
 {
   lib,
   imp,
